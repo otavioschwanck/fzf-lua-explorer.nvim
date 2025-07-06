@@ -44,7 +44,8 @@ local explorer_state = {
   copy_files = {},
   operation = nil,
   clipboard_win = nil,
-  clipboard_buf = nil
+  clipboard_buf = nil,
+  had_clipboard = false
 }
 
 -- Generate header with current keybindings
@@ -1488,6 +1489,38 @@ function M.explorer(opts)
       [config.keybindings.open_hsplit] = open_hsplit_action(opts)
     }
   }
+
+  -- Store the original fzf state for resume detection
+  explorer_state.last_fzf_opts = fzf_opts
+  
+  -- Hook into fzf completion to detect resume
+  local original_on_complete = fzf_opts.fn_post_fzf
+  fzf_opts.fn_post_fzf = function(...)
+    -- Check if clipboard should be restored on next resume
+    if #explorer_state.cut_files > 0 or #explorer_state.copy_files > 0 then
+      -- Set a flag that we had clipboard visible
+      explorer_state.had_clipboard = true
+    end
+    
+    if original_on_complete then
+      return original_on_complete(...)
+    end
+  end
+  
+  -- Hook to restore clipboard after picker opens
+  local original_fn_pre_fzf = fzf_opts.fn_pre_fzf
+  fzf_opts.fn_pre_fzf = function(...)
+    -- If this looks like a resume and we had clipboard, restore it
+    if explorer_state.had_clipboard and (#explorer_state.cut_files > 0 or #explorer_state.copy_files > 0) then
+      vim.schedule(function()
+        show_clipboard_buffer()
+      end)
+    end
+    
+    if original_fn_pre_fzf then
+      return original_fn_pre_fzf(...)
+    end
+  end
 
   -- Use core.fzf_exec like files() does for proper icon handling
   core.fzf_exec(entries, fzf_opts)
