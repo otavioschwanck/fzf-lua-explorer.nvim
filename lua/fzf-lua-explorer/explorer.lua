@@ -312,7 +312,7 @@ local function rename_file_action(opts)
                     local success = vim.loop.fs_rename(old_path, new_path)
                     if success then
                         vim.schedule(function()
-                            M.explorer()
+                            M.explorer({ _internal_call = true })
                         end)
                     else
                         vim.notify('Failed to rename file', vim.log.levels.ERROR)
@@ -354,7 +354,7 @@ local function rename_file_action(opts)
                     
                     vim.api.nvim_buf_delete(buf, {force = true})
                     vim.schedule(function()
-                        M.explorer()
+                        M.explorer({ _internal_call = true })
                     end)
                 end
             })
@@ -485,7 +485,7 @@ local function paste_files_action(opts)
                 hide_clipboard_buffer()
                 
                 vim.schedule(function()
-                    M.explorer()
+                    M.explorer({ _internal_call = true })
                 end)
             end
         end)
@@ -536,7 +536,7 @@ local function delete_files_action(opts)
                 end
                 
                 vim.schedule(function()
-                    M.explorer()
+                    M.explorer({ _internal_call = true })
                 end)
             end
         end)
@@ -547,7 +547,7 @@ local function go_to_cwd_action(opts)
     return function()
         explorer_state.current_dir = vim.fn.fnamemodify(vim.fn.getcwd(), ':p')
         vim.schedule(function()
-            M.explorer()
+            M.explorer({ _internal_call = true })
         end)
     end
 end
@@ -555,18 +555,26 @@ end
 function M.explorer(opts)
     opts = opts or {}
     
-    if not explorer_state.current_dir then
-        explorer_state.current_dir = get_current_file_dir()
+    -- Always default to current file directory unless explicitly specified
+    local current_dir
+    if opts.cwd then
+        -- Use explicitly passed directory
+        current_dir = opts.cwd
+    elseif opts._internal_call and explorer_state.current_dir then
+        -- Use stored directory only for internal calls (after operations)
+        current_dir = explorer_state.current_dir
+    else
+        -- Default to current file directory for fresh calls
+        current_dir = get_current_file_dir()
     end
+    
+    current_dir = vim.fn.fnamemodify(current_dir, ':p')
+    explorer_state.current_dir = current_dir
     
     -- Show clipboard buffer if there are files in clipboard
     if #explorer_state.cut_files > 0 or #explorer_state.copy_files > 0 then
         show_clipboard_buffer()
     end
-    
-    local current_dir = opts.cwd or explorer_state.current_dir
-    current_dir = vim.fn.fnamemodify(current_dir, ':p')
-    explorer_state.current_dir = current_dir
     
     local files = get_files_in_dir(current_dir)
     local entries = {}
@@ -615,7 +623,7 @@ function M.explorer(opts)
                 if file_type == 'directory' then
                     explorer_state.current_dir = file_path
                     vim.schedule(function()
-                        M.explorer()
+                        M.explorer({ _internal_call = true })
                     end)
                 else
                     vim.cmd('edit ' .. vim.fn.fnameescape(file_path))
@@ -626,7 +634,7 @@ function M.explorer(opts)
                         once = true,
                         callback = function()
                             vim.schedule(function()
-                                M.explorer()
+                                M.explorer({ _internal_call = true })
                             end)
                         end
                     })
