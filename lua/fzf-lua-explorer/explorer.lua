@@ -1,9 +1,6 @@
-local fzf = require('fzf-lua')
 local core = require('fzf-lua.core')
-local fzf_config = require('fzf-lua.config')
 local make_entry = require('fzf-lua.make_entry')
 local path = require('fzf-lua.path')
-local utils = require('fzf-lua.utils')
 local actions = require('fzf-lua.actions')
 
 local M = {}
@@ -1231,10 +1228,10 @@ local function go_to_parent_action(opts)
     -- Remove trailing slash before getting parent directory
     local current_without_slash = explorer_state.current_dir:gsub('/$', '')
     local parent_dir = vim.fn.fnamemodify(current_without_slash, ':h')
-    
+
     -- Ensure parent dir has trailing slash for consistency
     parent_dir = vim.fn.fnamemodify(parent_dir, ':p')
-    
+
     -- Ensure we don't go above root directory
     if parent_dir ~= explorer_state.current_dir and parent_dir ~= '/' then
       explorer_state.current_dir = parent_dir
@@ -1430,4 +1427,3 @@ function M.explorer(opts)
 end
 
 return M
-
