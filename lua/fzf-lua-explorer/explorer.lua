@@ -515,8 +515,9 @@ local function paste_files_action(opts)
         table.insert(summary, 'Files:')
         
         for _, file_path in ipairs(files_to_paste) do
-            local filename = vim.fn.fnamemodify(file_path, ':t')
-            table.insert(summary, '  - ' .. filename)
+            -- Show path relative to current working directory (same as clipboard buffer)
+            local display_path = path.relative_to(file_path, vim.fn.getcwd()) or vim.fn.fnamemodify(file_path, ':t')
+            table.insert(summary, '  - ' .. display_path)
         end
         
         table.insert(summary, '')
@@ -531,8 +532,9 @@ local function paste_files_action(opts)
                     local target_path = path.join({explorer_state.current_dir, filename})
                     
                     if operation == 'cut' then
-                        local success = vim.loop.fs_rename(file_path, target_path)
-                        if not success then
+                        -- Use mv command for moving directories and files
+                        local success = vim.fn.system('mv "' .. file_path .. '" "' .. target_path .. '"')
+                        if vim.v.shell_error ~= 0 then
                             vim.notify('Failed to move: ' .. filename, vim.log.levels.ERROR)
                         end
                     elseif operation == 'copy' then
