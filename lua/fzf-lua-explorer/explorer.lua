@@ -275,7 +275,12 @@ local function get_files_in_dir(dir)
 end
 
 local function create_file_action(opts)
-    return function()
+    return function(selected, _opts)
+        -- Capture current search query from fzf state
+        local current_query = ""
+        if _opts then
+            current_query = _opts.last_query or _opts._last_query or _opts.query or ""
+        end
         local current_dir = explorer_state.current_dir
         local clean_dir = vim.fn.fnamemodify(current_dir, ':p')
         
@@ -283,6 +288,14 @@ local function create_file_action(opts)
             prompt = 'Create file: ',
             default = clean_dir
         }, function(input)
+            if not input or input == '' then
+                -- User cancelled, return to explorer
+                vim.schedule(function()
+                    M.explorer({ _internal_call = true, query = current_query })
+                end)
+                return
+            end
+            
             if input and input ~= '' then
                 local file_path = input
                 
@@ -299,8 +312,24 @@ local function create_file_action(opts)
                 if file then
                     file:close()
                     vim.cmd('edit ' .. vim.fn.fnameescape(file_path))
+                    
+                    -- Set up autocmd to return to explorer after editing
+                    local buf = vim.api.nvim_get_current_buf()
+                    vim.api.nvim_create_autocmd({'BufWritePost', 'BufLeave'}, {
+                        buffer = buf,
+                        once = true,
+                        callback = function()
+                            vim.schedule(function()
+                                M.explorer({ _internal_call = true, query = current_query })
+                            end)
+                        end
+                    })
                 else
                     vim.notify('Failed to create file: ' .. file_path, vim.log.levels.ERROR)
+                    -- Return to explorer even on failure
+                    vim.schedule(function()
+                        M.explorer({ _internal_call = true, query = current_query })
+                    end)
                 end
             end
         end)
@@ -308,7 +337,13 @@ local function create_file_action(opts)
 end
 
 local function rename_file_action(opts)
-    return function(selected)
+    return function(selected, _opts)
+        -- Capture current search query from fzf state
+        local current_query = ""
+        if _opts then
+            current_query = _opts.last_query or _opts._last_query or _opts.query or ""
+        end
+        
         local files_to_rename = {}
         
         if selected and #selected > 0 then
@@ -333,49 +368,77 @@ local function rename_file_action(opts)
         
         if #files_to_rename == 1 then
             local old_name = files_to_rename[1]
-            local old_path = path.join({explorer_state.current_dir, old_name})
+            local clean_old_name = old_name:gsub('/$', '')  -- Remove trailing slash for path construction
+            local old_path = path.join({explorer_state.current_dir, clean_old_name})
             
             vim.ui.input({
                 prompt = 'Rename to: ',
                 default = old_name
             }, function(new_name)
-                if new_name and new_name ~= '' and new_name ~= old_name then
-                    local new_path = path.join({explorer_state.current_dir, new_name})
-                    
-                    -- Check if target already exists
-                    if vim.fn.filereadable(new_path) == 1 or vim.fn.isdirectory(new_path) == 1 then
-                        vim.ui.input({
-                            prompt = string.format('File "%s" already exists. Replace it? (y/n): ', new_name)
-                        }, function(choice)
-                            if choice and choice:lower() == 'y' then
-                                -- Remove existing file/directory first
-                                local rm_result = vim.fn.system('rm -rf "' .. new_path .. '"')
-                                if vim.v.shell_error ~= 0 then
-                                    vim.notify('Failed to remove existing file: ' .. rm_result, vim.log.levels.ERROR)
-                                    return
-                                end
-                                
-                                -- Proceed with rename
-                                local success = vim.loop.fs_rename(old_path, new_path)
-                                if success then
-                                    vim.schedule(function()
-                                        M.explorer({ _internal_call = true })
-                                    end)
-                                else
-                                    vim.notify('Failed to rename file', vim.log.levels.ERROR)
-                                end
+                if not new_name or new_name == '' then
+                    -- User cancelled or entered empty name, resume picker
+                    actions.resume()
+                    return
+                end
+                
+                -- Check if we're renaming a folder and ensure trailing slash consistency
+                local is_folder = old_name:match('/$') ~= nil
+                if is_folder and not new_name:match('/$') then
+                    new_name = new_name .. '/'
+                elseif not is_folder and new_name:match('/$') then
+                    -- Remove trailing slash if renaming a file but user added one
+                    new_name = new_name:gsub('/$', '')
+                end
+                
+                -- After normalization, check if it's the same name
+                if new_name == old_name then
+                    vim.notify('Same name, no change needed', vim.log.levels.INFO)
+                    -- Resume the picker to keep it open
+                    actions.resume()
+                    return
+                end
+                
+                -- Handle path construction properly for folders
+                local clean_new_name = new_name:gsub('/$', '')  -- Remove trailing slash for path construction
+                local new_path = path.join({explorer_state.current_dir, clean_new_name})
+                
+                -- Check if target already exists
+                if vim.fn.filereadable(new_path) == 1 or vim.fn.isdirectory(new_path) == 1 then
+                    vim.ui.input({
+                        prompt = string.format('File "%s" already exists. Replace it? (y/n): ', new_name)
+                    }, function(choice)
+                        if choice and choice:lower() == 'y' then
+                            -- Remove existing file/directory first
+                            local rm_result = vim.fn.system('rm -rf "' .. new_path .. '"')
+                            if vim.v.shell_error ~= 0 then
+                                vim.notify('Failed to remove existing file: ' .. rm_result, vim.log.levels.ERROR)
+                                return
                             end
+                            
+                            -- Proceed with rename
+                            local success = vim.loop.fs_rename(old_path, new_path)
+                            if success then
+                                -- Refresh the explorer with preserved search query
+                                vim.schedule(function()
+                                    M.explorer({ _internal_call = true, query = current_query })
+                                end)
+                            else
+                                vim.notify('Failed to rename file', vim.log.levels.ERROR)
+                                actions.resume()
+                            end
+                        end
+                    end)
+                else
+                    -- No conflict, proceed with rename
+                    local success = vim.loop.fs_rename(old_path, new_path)
+                    if success then
+                        -- Refresh the explorer with preserved search query
+                        vim.schedule(function()
+                            M.explorer({ _internal_call = true, query = current_query })
                         end)
                     else
-                        -- No conflict, proceed with rename
-                        local success = vim.loop.fs_rename(old_path, new_path)
-                        if success then
-                            vim.schedule(function()
-                                M.explorer({ _internal_call = true })
-                            end)
-                        else
-                            vim.notify('Failed to rename file', vim.log.levels.ERROR)
-                        end
+                        vim.notify('Failed to rename file', vim.log.levels.ERROR)
+                        actions.resume()
                     end
                 end
             end)
@@ -407,8 +470,23 @@ local function rename_file_action(opts)
                     for i, old_name in ipairs(files_to_rename) do
                         local new_name = new_names[i]
                         if new_name and new_name ~= old_name then
-                            local old_path = path.join({explorer_state.current_dir, old_name})
-                            local new_path = path.join({explorer_state.current_dir, new_name})
+                            -- Handle trailing slash consistency for batch rename
+                            local is_folder = old_name:match('/$') ~= nil
+                            if is_folder and not new_name:match('/$') then
+                                new_name = new_name .. '/'
+                            elseif not is_folder and new_name:match('/$') then
+                                new_name = new_name:gsub('/$', '')
+                            end
+                            
+                            -- Skip if names are the same after normalization
+                            if new_name == old_name then
+                                goto continue
+                            end
+                            
+                            local clean_old_name = old_name:gsub('/$', '')
+                            local clean_new_name = new_name:gsub('/$', '')
+                            local old_path = path.join({explorer_state.current_dir, clean_old_name})
+                            local new_path = path.join({explorer_state.current_dir, clean_new_name})
                             
                             local op = {
                                 old_name = old_name,
@@ -423,6 +501,7 @@ local function rename_file_action(opts)
                                 table.insert(conflicts, op)
                             end
                         end
+                        ::continue::
                     end
                     
                     -- Close the buffer first
@@ -650,7 +729,7 @@ local function generate_unique_name(filename, directory)
 end
 
 -- Execute paste operations
-local function execute_paste_operations(operations, operation)
+local function execute_paste_operations(operations, operation, query)
     for _, op in ipairs(operations) do
         -- Check if source exists
         if vim.fn.isdirectory(op.source) == 0 and vim.fn.filereadable(op.source) == 0 then
@@ -701,12 +780,12 @@ local function execute_paste_operations(operations, operation)
     hide_clipboard_buffer()
     
     vim.schedule(function()
-        M.explorer({ _internal_call = true })
+        M.explorer({ _internal_call = true, query = query or "" })
     end)
 end
 
 -- Resolve conflicts individually
-local function resolve_conflicts_individually(operations, conflicts, operation)
+local function resolve_conflicts_individually(operations, conflicts, operation, query)
     local conflict_index = 0
     local skipped_operations = {}
     
@@ -729,7 +808,7 @@ local function resolve_conflicts_individually(operations, conflicts, operation)
             end
             
             if #final_operations > 0 then
-                execute_paste_operations(final_operations, operation)
+                execute_paste_operations(final_operations, operation, query)
             else
                 vim.notify('All operations cancelled', vim.log.levels.INFO)
             end
@@ -791,7 +870,12 @@ local function resolve_conflicts_individually(operations, conflicts, operation)
 end
 
 local function paste_files_action(opts)
-    return function()
+    return function(selected, _opts)
+        -- Capture current search query from fzf state
+        local current_query = ""
+        if _opts then
+            current_query = _opts.last_query or _opts._last_query or _opts.query or ""
+        end
         local files_to_paste = {}
         local operation = explorer_state.operation
         
@@ -848,14 +932,14 @@ local function paste_files_action(opts)
         
         if #conflicts > 0 then
             -- Resolve conflicts individually
-            resolve_conflicts_individually(operations, conflicts, operation)
+            resolve_conflicts_individually(operations, conflicts, operation, current_query)
         else
             -- No conflicts, proceed with normal confirmation
             vim.ui.input({
                 prompt = table.concat(summary, '\n') .. '\n> '
             }, function(input)
                 if input and input:lower() == 'y' then
-                    execute_paste_operations(operations, operation)
+                    execute_paste_operations(operations, operation, current_query)
                 end
             end)
         end
@@ -863,7 +947,12 @@ local function paste_files_action(opts)
 end
 
 local function delete_files_action(opts)
-    return function(selected)
+    return function(selected, _opts)
+        -- Capture current search query from fzf state
+        local current_query = ""
+        if _opts then
+            current_query = _opts.last_query or _opts._last_query or _opts.query or ""
+        end
         local files_to_delete = {}
         
         if selected and #selected > 0 then
@@ -906,7 +995,7 @@ local function delete_files_action(opts)
                 end
                 
                 vim.schedule(function()
-                    M.explorer({ _internal_call = true })
+                    M.explorer({ _internal_call = true, query = current_query })
                 end)
             end
         end)
@@ -1051,6 +1140,7 @@ function M.explorer(opts)
         cwd = current_dir,
         file_icons = config.show_icons,
         color_icons = config.show_icons,
+        query = opts.query or "",
         fzf_opts = {
             ['--header'] = generate_header(),
             ['--multi'] = true,
