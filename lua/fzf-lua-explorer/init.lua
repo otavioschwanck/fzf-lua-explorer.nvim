@@ -10,6 +10,7 @@ local default_config = {
         cut_files = 'ctrl-x',
         copy_files = 'ctrl-y',
         paste_files = 'ctrl-v',
+        clean_clipboard = 'ctrl-e',
         go_to_cwd = 'ctrl-g',
         find_folders = 'ctrl-f',
         delete_files = 'del'

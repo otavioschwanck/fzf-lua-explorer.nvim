@@ -34,6 +34,7 @@ local config = {
         cut_files = 'ctrl-x',
         copy_files = 'ctrl-y',
         paste_files = 'ctrl-v',
+        clean_clipboard = 'ctrl-e',
         go_to_cwd = 'ctrl-g',
         find_folders = 'ctrl-f',
         delete_files = 'del'
@@ -58,9 +59,9 @@ local explorer_state = {
 -- Generate header with current keybindings
 local function generate_header()
     local kb = config.keybindings
-    return string.format('%s:create %s:rename %s:cut %s:copy %s:paste %s:cwd %s:find %s:delete',
+    return string.format('%s:create %s:rename %s:cut %s:copy\n%s:cwd %s:find %s:delete',
         kb.create_file:upper(), kb.rename_file:upper(), kb.cut_files:upper(),
-        kb.copy_files:upper(), kb.paste_files:upper(), kb.go_to_cwd:upper(),
+        kb.copy_files:upper(), kb.go_to_cwd:upper(),
         kb.find_folders:upper(), kb.delete_files:upper()
     )
 end
@@ -171,6 +172,7 @@ local function update_clipboard_buffer()
     -- Add instructions
     if has_content then
         table.insert(lines, 'Press ' .. config.keybindings.paste_files:upper() .. ' to paste')
+        table.insert(lines, 'Press ' .. config.keybindings.clean_clipboard:upper() .. ' to clean')
     else
         table.insert(lines, 'No files in clipboard')
         table.insert(lines, '')
@@ -1103,6 +1105,21 @@ local function delete_files_action(opts)
     end
 end
 
+local function clean_clipboard_action(opts)
+    return function()
+        -- Clear clipboard
+        explorer_state.cut_files = {}
+        explorer_state.copy_files = {}
+        explorer_state.operation = nil
+        hide_clipboard_buffer()
+        
+        vim.notify('Clipboard cleared', vim.log.levels.INFO)
+        
+        -- Resume the picker to keep it open
+        actions.resume()
+    end
+end
+
 local function go_to_cwd_action(opts)
     return function()
         explorer_state.current_dir = vim.fn.fnamemodify(vim.fn.getcwd(), ':p')
@@ -1292,6 +1309,7 @@ function M.explorer(opts)
             [config.keybindings.cut_files] = cut_files_action(opts),
             [config.keybindings.copy_files] = copy_files_action(opts),
             [config.keybindings.paste_files] = paste_files_action(opts),
+            [config.keybindings.clean_clipboard] = clean_clipboard_action(opts),
             [config.keybindings.go_to_cwd] = go_to_cwd_action(opts),
             [config.keybindings.find_folders] = find_folders_action(opts),
             [config.keybindings.delete_files] = delete_files_action(opts)

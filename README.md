@@ -90,6 +90,7 @@ require("fzf-lua-explorer").setup({
     cut_files = 'ctrl-x',       -- Default: 'ctrl-x'
     copy_files = 'ctrl-c',      -- Default: 'ctrl-y'
     paste_files = 'ctrl-v',     -- Default: 'ctrl-v'
+    clean_clipboard = 'ctrl-e', -- Default: 'ctrl-e'
     go_to_cwd = 'ctrl-h',       -- Default: 'ctrl-g'
     find_folders = 'ctrl-f',    -- Default: 'ctrl-f'
     delete_files = 'del'        -- Default: 'del'
@@ -126,6 +127,7 @@ require("fzf-lua-explorer").setup({
 | `Ctrl+x` | Cut file(s) |
 | `Ctrl+y` | Copy file(s) |
 | `Ctrl+v` | Paste files with conflict resolution |
+| `Ctrl+e` | Clean clipboard |
 | `Ctrl+g` | Go to current working directory |
 | `Ctrl+f` | Find and navigate to folders |
 | `Tab` | Select/deselect multiple files |
