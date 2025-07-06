@@ -15,7 +15,16 @@ local default_config = {
         find_folders = 'ctrl-f',
         delete_files = 'del'
     },
-    show_icons = true
+    show_icons = true,
+    clipboard_buffer = {
+        enabled = true,          -- Show clipboard buffer
+        min_width = 40,          -- Minimum width of clipboard buffer
+        max_width = 80,          -- Maximum width of clipboard buffer
+        height = 10,             -- Height of clipboard buffer
+        row = 2,                 -- Row position (from top)
+        col_offset = 2,          -- Offset from right edge
+        border = 'rounded'       -- Border style
+    }
 }
 
 -- Store configuration globally so explorer can access it

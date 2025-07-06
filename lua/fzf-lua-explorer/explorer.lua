@@ -39,7 +39,16 @@ local config = {
         find_folders = 'ctrl-f',
         delete_files = 'del'
     },
-    show_icons = true
+    show_icons = true,
+    clipboard_buffer = {
+        enabled = true,
+        min_width = 40,
+        max_width = 80,
+        height = 10,
+        row = 2,
+        col_offset = 2,
+        border = 'rounded'
+    }
 }
 
 -- Function to set configuration from init.lua
@@ -59,7 +68,7 @@ local explorer_state = {
 -- Generate header with current keybindings
 local function generate_header()
     local kb = config.keybindings
-    return string.format('%s:create %s:rename %s:cut %s:copy\n%s:cwd %s:find %s:delete',
+    return string.format('%s:create %s:rename %s:cut %s:copy\n%s:cwd %s:find folder %s:delete',
         kb.create_file:upper(), kb.rename_file:upper(), kb.cut_files:upper(),
         kb.copy_files:upper(), kb.go_to_cwd:upper(),
         kb.find_folders:upper(), kb.delete_files:upper()
@@ -88,11 +97,34 @@ local function extract_filename(entry)
     return fallback or entry
 end
 
+-- Calculate dynamic width based on content
+local function calculate_clipboard_width(lines)
+    local max_length = 0
+    for _, line in ipairs(lines) do
+        local length = vim.fn.strdisplaywidth(line)
+        if length > max_length then
+            max_length = length
+        end
+    end
+    
+    -- Add some padding and ensure within min/max bounds
+    local width = max_length + 4
+    if width < config.clipboard_buffer.min_width then
+        width = config.clipboard_buffer.min_width
+    elseif width > config.clipboard_buffer.max_width then
+        width = config.clipboard_buffer.max_width
+    end
+    
+    return width
+end
+
 -- Create floating buffer to show clipboard status
-local function create_clipboard_buffer()
+local function create_clipboard_buffer(lines)
     if explorer_state.clipboard_win and vim.api.nvim_win_is_valid(explorer_state.clipboard_win) then
         return  -- Already exists
     end
+    
+    lines = lines or {}
     
     -- Create buffer
     local buf = vim.api.nvim_create_buf(false, true)
@@ -102,11 +134,11 @@ local function create_clipboard_buffer()
     vim.api.nvim_buf_set_option(buf, 'bufhidden', 'wipe')
     vim.api.nvim_buf_set_option(buf, 'filetype', 'fzf-lua-explorer-clipboard')
     
-    -- Window configuration
-    local width = 40
-    local height = 10
-    local row = 2
-    local col = vim.o.columns - width - 2
+    -- Calculate dynamic width based on content
+    local width = calculate_clipboard_width(lines)
+    local height = config.clipboard_buffer.height
+    local row = config.clipboard_buffer.row
+    local col = vim.o.columns - width - config.clipboard_buffer.col_offset
     
     local win_config = {
         relative = 'editor',
@@ -114,7 +146,7 @@ local function create_clipboard_buffer()
         col = col,
         width = width,
         height = height,
-        border = 'rounded',
+        border = config.clipboard_buffer.border,
         style = 'minimal',
         title = ' Clipboard ',
         title_pos = 'center',
@@ -133,15 +165,8 @@ local function create_clipboard_buffer()
     return buf, win
 end
 
--- Update clipboard buffer content
-local function update_clipboard_buffer()
-    if not explorer_state.clipboard_buf or not vim.api.nvim_buf_is_valid(explorer_state.clipboard_buf) then
-        return
-    end
-    
-    -- Make buffer modifiable
-    vim.api.nvim_buf_set_option(explorer_state.clipboard_buf, 'modifiable', true)
-    
+-- Build clipboard buffer content
+local function build_clipboard_content()
     local lines = {}
     local has_content = false
     
@@ -180,16 +205,44 @@ local function update_clipboard_buffer()
         table.insert(lines, config.keybindings.copy_files:upper() .. ': Copy files')
     end
     
+    return lines
+end
+
+-- Update clipboard buffer content
+local function update_clipboard_buffer()
+    if not explorer_state.clipboard_buf or not vim.api.nvim_buf_is_valid(explorer_state.clipboard_buf) then
+        return
+    end
+    
+    -- Make buffer modifiable
+    vim.api.nvim_buf_set_option(explorer_state.clipboard_buf, 'modifiable', true)
+    
+    local lines = build_clipboard_content()
+    
     -- Update buffer content
     vim.api.nvim_buf_set_lines(explorer_state.clipboard_buf, 0, -1, false, lines)
     
     -- Set buffer as unmodifiable
     vim.api.nvim_buf_set_option(explorer_state.clipboard_buf, 'modifiable', false)
+    
+    -- Resize window if needed
+    local new_width = calculate_clipboard_width(lines)
+    local current_config = vim.api.nvim_win_get_config(explorer_state.clipboard_win)
+    if current_config.width ~= new_width then
+        current_config.width = new_width
+        current_config.col = vim.o.columns - new_width - config.clipboard_buffer.col_offset
+        vim.api.nvim_win_set_config(explorer_state.clipboard_win, current_config)
+    end
 end
 
 -- Show clipboard buffer
 local function show_clipboard_buffer()
-    create_clipboard_buffer()
+    if not config.clipboard_buffer.enabled then
+        return  -- Clipboard buffer is disabled
+    end
+    
+    local lines = build_clipboard_content()
+    create_clipboard_buffer(lines)
     update_clipboard_buffer()
 end
 

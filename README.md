@@ -94,6 +94,17 @@ require("fzf-lua-explorer").setup({
     go_to_cwd = 'ctrl-h',       -- Default: 'ctrl-g'
     find_folders = 'ctrl-f',    -- Default: 'ctrl-f'
     delete_files = 'del'        -- Default: 'del'
+  },
+  
+  -- Customize clipboard buffer
+  clipboard_buffer = {
+    enabled = true,             -- Show clipboard buffer
+    min_width = 40,             -- Minimum width
+    max_width = 80,             -- Maximum width  
+    height = 10,                -- Height
+    row = 2,                    -- Row position from top
+    col_offset = 2,             -- Offset from right edge
+    border = 'rounded'          -- Border style
   }
 })
 ```
@@ -104,6 +115,17 @@ require("fzf-lua-explorer").setup({
 -- Disable icons for better performance or compatibility
 require("fzf-lua-explorer").setup({
   show_icons = false
+})
+```
+
+### Disabling Clipboard Buffer
+
+```lua
+-- Disable the floating clipboard buffer
+require("fzf-lua-explorer").setup({
+  clipboard_buffer = {
+    enabled = false
+  }
 })
 ```
 
