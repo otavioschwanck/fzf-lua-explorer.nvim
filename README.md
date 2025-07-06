@@ -89,13 +89,7 @@ use {
 ### Basic Setup
 
 ```lua
--- Default setup with <leader>e keymap and :Explorer command
 require("fzf-lua-explorer").setup()
-
--- Custom setup
-require("fzf-lua-explorer").setup({
-  keymap = "<leader>fe",  -- Custom keymap (set to false to disable)
-})
 
 -- Use directly without setup
 require("fzf-lua-explorer").explorer()
@@ -111,9 +105,6 @@ require("fzf-lua-explorer").explorer({ cwd = "/path/to/directory" })
 
 ```lua
 require("fzf-lua-explorer").setup({
-  -- Main keymap to open explorer (set to false to disable)
-  keymap = "<leader>e",         -- Default: "<leader>e"
-  
   -- Show file and folder icons
   show_icons = true,            -- Default: true
   
