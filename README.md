@@ -43,7 +43,7 @@ Perfect for developers who want a **keyboard-driven file manager** that integrat
 
 ```lua
 {
-  "your-username/fzf-lua-explorer",
+  "otavioschwanck/fzf-lua-explorer.nvim",
   dependencies = { "ibhagwan/fzf-lua" },
   config = function()
     require("fzf-lua-explorer").setup()
@@ -55,7 +55,7 @@ Perfect for developers who want a **keyboard-driven file manager** that integrat
 
 ```lua
 use {
-  "your-username/fzf-lua-explorer",
+  "otavioschwanck/fzf-lua-explorer.nvim",
   requires = { "ibhagwan/fzf-lua" },
   config = function()
     require("fzf-lua-explorer").setup()
