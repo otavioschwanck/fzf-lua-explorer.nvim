@@ -118,8 +118,9 @@ local function update_clipboard_buffer()
     if #explorer_state.cut_files > 0 then
         table.insert(lines, '✂️  Cut Files:')
         for _, file in ipairs(explorer_state.cut_files) do
-            local basename = vim.fn.fnamemodify(file, ':t')
-            table.insert(lines, '  ' .. basename)
+            -- Show path relative to current working directory
+            local display_path = path.relative_to(file, vim.fn.getcwd()) or file
+            table.insert(lines, '  ' .. display_path)
         end
         table.insert(lines, '')
         has_content = true
@@ -129,8 +130,9 @@ local function update_clipboard_buffer()
     if #explorer_state.copy_files > 0 then
         table.insert(lines, '📋 Copy Files:')
         for _, file in ipairs(explorer_state.copy_files) do
-            local basename = vim.fn.fnamemodify(file, ':t')
-            table.insert(lines, '  ' .. basename)
+            -- Show path relative to current working directory
+            local display_path = path.relative_to(file, vim.fn.getcwd()) or file
+            table.insert(lines, '  ' .. display_path)
         end
         table.insert(lines, '')
         has_content = true
@@ -603,9 +605,11 @@ function M.explorer(opts)
             ['--bind'] = 'tab:toggle'
         },
         previewer = 'builtin',
-        on_complete = function()
-            hide_clipboard_buffer()
-        end,
+        winopts = {
+            on_close = function()
+                hide_clipboard_buffer()
+            end
+        },
         actions = {
             ['default'] = function(selected)
                 if not selected or #selected == 0 then
