@@ -369,17 +369,6 @@ local function create_file_action(opts)
                     file:close()
                     vim.cmd('edit ' .. vim.fn.fnameescape(file_path))
                     
-                    -- Set up autocmd to return to explorer after editing
-                    local buf = vim.api.nvim_get_current_buf()
-                    vim.api.nvim_create_autocmd({'BufWritePost', 'BufLeave'}, {
-                        buffer = buf,
-                        once = true,
-                        callback = function()
-                            vim.schedule(function()
-                                M.explorer({ _internal_call = true, query = current_query })
-                            end)
-                        end
-                    })
                 else
                     vim.notify('Failed to create file: ' .. file_path, vim.log.levels.ERROR)
                     -- Return to explorer even on failure
@@ -886,7 +875,7 @@ end
 
 
 -- Execute paste operations
-local function execute_paste_operations(operations, operation, query)
+local function execute_paste_operations(operations, query)
     for _, op in ipairs(operations) do
         -- Check if source exists
         if vim.fn.isdirectory(op.source) == 0 and vim.fn.filereadable(op.source) == 0 then
@@ -900,31 +889,53 @@ local function execute_paste_operations(operations, operation, query)
             goto continue
         end
         
-        if operation == 'cut' then
-            -- For move operations, remove target first if it exists, then move
-            if vim.fn.isdirectory(op.target) == 1 or vim.fn.filereadable(op.target) == 1 then
-                local rm_result = vim.fn.system('rm -rf "' .. op.target .. '"')
+        if op.operation_type == 'cut' then
+            if op.merge_operation then
+                -- For merge operations, merge source into target, then remove source
+                local merge_result = vim.fn.system('cp -r "' .. op.source .. '/." "' .. op.target .. '/"')
                 if vim.v.shell_error ~= 0 then
-                    vim.notify('Failed to remove target: ' .. op.target .. ' - ' .. rm_result, vim.log.levels.ERROR)
+                    vim.notify('Failed to merge directories: ' .. op.filename .. ' - ' .. merge_result, vim.log.levels.ERROR)
                     goto continue
                 end
-            end
-            local mv_result = vim.fn.system('mv "' .. op.source .. '" "' .. op.target .. '"')
-            if vim.v.shell_error ~= 0 then
-                vim.notify('Failed to move: ' .. op.filename .. ' - ' .. mv_result, vim.log.levels.ERROR)
-            end
-        elseif operation == 'copy' then
-            -- For copy operations, remove target first if it exists, then copy
-            if vim.fn.isdirectory(op.target) == 1 or vim.fn.filereadable(op.target) == 1 then
-                local rm_result = vim.fn.system('rm -rf "' .. op.target .. '"')
+                -- Remove source directory after successful merge
+                local rm_result = vim.fn.system('rm -rf "' .. op.source .. '"')
                 if vim.v.shell_error ~= 0 then
-                    vim.notify('Failed to remove target: ' .. op.target .. ' - ' .. rm_result, vim.log.levels.ERROR)
-                    goto continue
+                    vim.notify('Warning: Merge succeeded but failed to remove source: ' .. op.filename .. ' - ' .. rm_result, vim.log.levels.WARN)
+                end
+            else
+                -- For move operations, remove target first if it exists, then move
+                if vim.fn.isdirectory(op.target) == 1 or vim.fn.filereadable(op.target) == 1 then
+                    local rm_result = vim.fn.system('rm -rf "' .. op.target .. '"')
+                    if vim.v.shell_error ~= 0 then
+                        vim.notify('Failed to remove target: ' .. op.target .. ' - ' .. rm_result, vim.log.levels.ERROR)
+                        goto continue
+                    end
+                end
+                local mv_result = vim.fn.system('mv "' .. op.source .. '" "' .. op.target .. '"')
+                if vim.v.shell_error ~= 0 then
+                    vim.notify('Failed to move: ' .. op.filename .. ' - ' .. mv_result, vim.log.levels.ERROR)
                 end
             end
-            local cp_result = vim.fn.system('cp -r "' .. op.source .. '" "' .. op.target .. '"')
-            if vim.v.shell_error ~= 0 then
-                vim.notify('Failed to copy: ' .. op.filename .. ' - ' .. cp_result, vim.log.levels.ERROR)
+        elseif op.operation_type == 'copy' then
+            if op.merge_operation then
+                -- For merge operations, merge source into target
+                local merge_result = vim.fn.system('cp -r "' .. op.source .. '/." "' .. op.target .. '/"')
+                if vim.v.shell_error ~= 0 then
+                    vim.notify('Failed to merge directories: ' .. op.filename .. ' - ' .. merge_result, vim.log.levels.ERROR)
+                end
+            else
+                -- For copy operations, remove target first if it exists, then copy
+                if vim.fn.isdirectory(op.target) == 1 or vim.fn.filereadable(op.target) == 1 then
+                    local rm_result = vim.fn.system('rm -rf "' .. op.target .. '"')
+                    if vim.v.shell_error ~= 0 then
+                        vim.notify('Failed to remove target: ' .. op.target .. ' - ' .. rm_result, vim.log.levels.ERROR)
+                        goto continue
+                    end
+                end
+                local cp_result = vim.fn.system('cp -r "' .. op.source .. '" "' .. op.target .. '"')
+                if vim.v.shell_error ~= 0 then
+                    vim.notify('Failed to copy: ' .. op.filename .. ' - ' .. cp_result, vim.log.levels.ERROR)
+                end
             end
         end
         ::continue::
@@ -942,7 +953,7 @@ local function execute_paste_operations(operations, operation, query)
 end
 
 -- Resolve conflicts individually
-local function resolve_conflicts_individually(operations, conflicts, operation, query)
+local function resolve_conflicts_individually(operations, conflicts, query)
     local conflict_index = 0
     local skipped_operations = {}
     
@@ -965,7 +976,7 @@ local function resolve_conflicts_individually(operations, conflicts, operation, 
             end
             
             if #final_operations > 0 then
-                execute_paste_operations(final_operations, operation, query)
+                execute_paste_operations(final_operations, query)
             else
                 vim.notify('All operations cancelled', vim.log.levels.INFO)
             end
@@ -976,13 +987,29 @@ local function resolve_conflicts_individually(operations, conflicts, operation, 
         local conflict_summary = {}
         table.insert(conflict_summary, string.format('Conflict %d of %d', conflict_index, #conflicts))
         table.insert(conflict_summary, '')
-        table.insert(conflict_summary, string.format('File already exists: %s', conflict.filename))
-        table.insert(conflict_summary, '')
-        table.insert(conflict_summary, 'Choose action:')
-        table.insert(conflict_summary, '[r] Replace this file')
-        table.insert(conflict_summary, '[n] Rename this file')
-        table.insert(conflict_summary, '[s] Skip this file')
-        table.insert(conflict_summary, '[c] Cancel all remaining')
+        
+        -- Check if both source and target are directories
+        local is_source_dir = vim.fn.isdirectory(conflict.source) == 1
+        local is_target_dir = vim.fn.isdirectory(conflict.target) == 1
+        
+        if is_source_dir and is_target_dir then
+            table.insert(conflict_summary, string.format('Directory already exists: %s', conflict.filename))
+            table.insert(conflict_summary, '')
+            table.insert(conflict_summary, 'Choose action:')
+            table.insert(conflict_summary, '[r] Replace this directory')
+            table.insert(conflict_summary, '[m] Merge directories')
+            table.insert(conflict_summary, '[n] Rename this directory')
+            table.insert(conflict_summary, '[s] Skip this directory')
+            table.insert(conflict_summary, '[c] Cancel all remaining')
+        else
+            table.insert(conflict_summary, string.format('File already exists: %s', conflict.filename))
+            table.insert(conflict_summary, '')
+            table.insert(conflict_summary, 'Choose action:')
+            table.insert(conflict_summary, '[r] Replace this file')
+            table.insert(conflict_summary, '[n] Rename this file')
+            table.insert(conflict_summary, '[s] Skip this file')
+            table.insert(conflict_summary, '[c] Cancel all remaining')
+        end
         
         vim.ui.input({
             prompt = table.concat(conflict_summary, '\n') .. '\n> '
@@ -997,6 +1024,10 @@ local function resolve_conflicts_individually(operations, conflicts, operation, 
                 process_next_conflict()
             elseif choice:lower() == 'r' then
                 -- Replace this file - keep operation as is
+                process_next_conflict()
+            elseif choice:lower() == 'm' and is_source_dir and is_target_dir then
+                -- Merge directories - modify operation to merge instead of replace
+                conflict.merge_operation = true
                 process_next_conflict()
             elseif choice:lower() == 'n' then
                 -- Rename this file
@@ -1016,7 +1047,8 @@ local function resolve_conflicts_individually(operations, conflicts, operation, 
                     process_next_conflict()
                 end)
             else
-                vim.notify('Invalid choice. Please choose r, n, s, or c.', vim.log.levels.WARN)
+                local valid_choices = is_source_dir and is_target_dir and 'r, m, n, s, or c' or 'r, n, s, or c'
+                vim.notify('Invalid choice. Please choose ' .. valid_choices .. '.', vim.log.levels.WARN)
                 process_next_conflict()
             end
         end)
@@ -1033,32 +1065,36 @@ local function paste_files_action(opts)
         if _opts then
             current_query = _opts.last_query or _opts._last_query or _opts.query or ""
         end
-        local files_to_paste = {}
-        local operation = explorer_state.operation
-        
-        if operation == 'cut' then
-            files_to_paste = explorer_state.cut_files
-        elseif operation == 'copy' then
-            files_to_paste = explorer_state.copy_files
-        else
+        -- Check if we have any files to paste
+        if #explorer_state.cut_files == 0 and #explorer_state.copy_files == 0 then
             vim.notify('No files to paste', vim.log.levels.WARN)
             return
         end
         
-        if #files_to_paste == 0 then
-            vim.notify('No files to paste', vim.log.levels.WARN)
-            return
-        end
-        
+        -- Prepare operations for both cut and copy files
+        local operations = {}
         local summary = {}
-        table.insert(summary, 'Operation: ' .. (operation == 'cut' and 'Move' or 'Copy'))
+        table.insert(summary, 'Paste Operations:')
         table.insert(summary, 'Target directory: ' .. explorer_state.current_dir)
-        table.insert(summary, 'Files:')
         
-        for _, file_path in ipairs(files_to_paste) do
-            -- Show path relative to current working directory (same as clipboard buffer)
-            local display_path = path.relative_to(file_path, vim.fn.getcwd()) or vim.fn.fnamemodify(file_path, ':t')
-            table.insert(summary, '  - ' .. display_path)
+        -- Add cut files (move operations)
+        if #explorer_state.cut_files > 0 then
+            table.insert(summary, '')
+            table.insert(summary, 'Move Files:')
+            for _, file_path in ipairs(explorer_state.cut_files) do
+                local display_path = path.relative_to(file_path, vim.fn.getcwd()) or vim.fn.fnamemodify(file_path, ':t')
+                table.insert(summary, '  - ' .. display_path)
+            end
+        end
+        
+        -- Add copy files (copy operations)
+        if #explorer_state.copy_files > 0 then
+            table.insert(summary, '')
+            table.insert(summary, 'Copy Files:')
+            for _, file_path in ipairs(explorer_state.copy_files) do
+                local display_path = path.relative_to(file_path, vim.fn.getcwd()) or vim.fn.fnamemodify(file_path, ':t')
+                table.insert(summary, '  - ' .. display_path)
+            end
         end
         
         table.insert(summary, '')
@@ -1068,7 +1104,8 @@ local function paste_files_action(opts)
         local conflicts = {}
         local operations = {}
         
-        for _, file_path in ipairs(files_to_paste) do
+        -- Process cut files (move operations)
+        for _, file_path in ipairs(explorer_state.cut_files) do
             -- Handle folder paths properly (remove trailing slash before getting basename)
             local clean_path = file_path:gsub('/$', '')
             local filename = vim.fn.fnamemodify(clean_path, ':t')
@@ -1078,6 +1115,28 @@ local function paste_files_action(opts)
                 source = clean_path,  -- Use cleaned path for source
                 target = target_path,
                 filename = filename,
+                operation_type = 'cut',
+                has_conflict = vim.fn.filereadable(target_path) == 1 or vim.fn.isdirectory(target_path) == 1
+            }
+            
+            table.insert(operations, op)
+            if op.has_conflict then
+                table.insert(conflicts, op)
+            end
+        end
+        
+        -- Process copy files (copy operations)
+        for _, file_path in ipairs(explorer_state.copy_files) do
+            -- Handle folder paths properly (remove trailing slash before getting basename)
+            local clean_path = file_path:gsub('/$', '')
+            local filename = vim.fn.fnamemodify(clean_path, ':t')
+            local target_path = path.join({explorer_state.current_dir, filename})
+            
+            local op = {
+                source = clean_path,  -- Use cleaned path for source
+                target = target_path,
+                filename = filename,
+                operation_type = 'copy',
                 has_conflict = vim.fn.filereadable(target_path) == 1 or vim.fn.isdirectory(target_path) == 1
             }
             
@@ -1089,14 +1148,14 @@ local function paste_files_action(opts)
         
         if #conflicts > 0 then
             -- Resolve conflicts individually
-            resolve_conflicts_individually(operations, conflicts, operation, current_query)
+            resolve_conflicts_individually(operations, conflicts, current_query)
         else
             -- No conflicts, proceed with normal confirmation
             vim.ui.input({
                 prompt = table.concat(summary, '\n') .. '\n> '
             }, function(input)
                 if input and input:lower() == 'y' then
-                    execute_paste_operations(operations, operation, current_query)
+                    execute_paste_operations(operations, current_query)
                 end
             end)
         end
@@ -1362,16 +1421,6 @@ function M.explorer(opts)
                 else
                     vim.cmd('edit ' .. vim.fn.fnameescape(file_path))
                     
-                    local buf = vim.api.nvim_get_current_buf()
-                    vim.api.nvim_create_autocmd({'BufWritePost', 'BufLeave'}, {
-                        buffer = buf,
-                        once = true,
-                        callback = function()
-                            vim.schedule(function()
-                                M.explorer({ _internal_call = true })
-                            end)
-                        end
-                    })
                 end
             end,
             [config.keybindings.create_file] = create_file_action(opts),

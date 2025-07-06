@@ -1,22 +1,41 @@
 # FZF-Lua Explorer
 
-A custom file explorer picker for fzf-lua with comprehensive file management capabilities.
+A **fast, lightweight file browser** built on top of fzf-lua, designed for **quick file operations and editing workflows**. Navigate, create, rename, cut, copy, and manage multiple files efficiently with a **persistent session clipboard** that maintains your selections even when the explorer is closed and reopened.
 
-## Features
+Perfect for developers who want a **keyboard-driven file manager** that integrates seamlessly with their Neovim workflow.
 
-- **Directory Navigation**: Opens in current file directory, starts with `../` for easy navigation
-- **File Creation**: Create new files with `Ctrl+a`
-- **File Renaming**: Rename single or multiple files with `Ctrl+r` (with conflict resolution)
-- **File Operations**: Cut (`Ctrl+x`), Copy (`Ctrl+y`), and Paste (`Ctrl+v`) with conflict resolution
-- **File Deletion**: Delete files with `DEL` key
-- **Multi-select**: Select multiple files with `Tab`
-- **Quick CWD**: Jump to current working directory with `Ctrl+g`
-- **Folder Search**: Find and navigate to any folder with `Ctrl+f`
-- **Conflict Resolution**: Individual conflict handling for paste and rename operations
-- **Clipboard Buffer**: Visual clipboard showing cut/copied files
-- **Preview**: Built-in file preview support
-- **Icons**: Supports fzf-lua icons (when available)
-- **Customizable Keybindings**: All shortcuts can be customized
+## Key Features
+
+### 🚀 **Fast & Efficient**
+- **fzf-powered**: Lightning-fast fuzzy search through files and directories
+- **Keyboard-driven**: All operations accessible via customizable shortcuts
+- **Instant preview**: Built-in file preview support
+- **Smart navigation**: Opens in current file directory with `../` for quick parent access
+
+### 📁 **Comprehensive File Management**
+- **Multi-file operations**: Select multiple files with `Tab` for batch operations
+- **File creation**: Create new files with automatic directory creation
+- **Smart renaming**: Rename single or multiple files with automatic conflict resolution
+- **Directory merging**: Merge directories during move/rename operations
+- **Safe deletion**: Confirmation prompts for destructive operations
+
+### 📋 **Session Clipboard**
+- **Persistent clipboard**: Cut/copied files remain available even after closing the explorer
+- **Visual feedback**: Floating clipboard buffer shows your current selections
+- **Toggle operations**: Cut/copy the same file again to remove it from clipboard
+- **Mixed operations**: Mix cut and copy operations as needed
+
+### 🔧 **Smart Conflict Resolution**
+- **Individual handling**: Resolve each conflict separately (Replace/Merge/Rename/Skip/Cancel)
+- **Directory merging**: Merge source directory contents into existing target directories
+- **Auto-suggestions**: Automatic unique name generation for rename conflicts
+- **Batch processing**: Handle multiple conflicts efficiently
+
+### 🎨 **Customizable Interface**
+- **Flexible keybindings**: Customize all shortcuts to your preference
+- **Optional icons**: File and folder icons with color support (toggleable)
+- **Configurable clipboard**: Customize or disable the floating clipboard buffer
+- **Adaptive sizing**: Clipboard buffer resizes based on filename lengths
 
 ## Installation
 
