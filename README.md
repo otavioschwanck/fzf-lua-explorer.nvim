@@ -71,6 +71,12 @@ require("fzf-lua-explorer").setup({
 
 -- Use directly without setup
 require("fzf-lua-explorer").explorer()
+
+-- Open explorer in project root (current working directory)
+require("fzf-lua-explorer").explorer({ cwd = vim.fn.getcwd() })
+
+-- Open explorer in a specific directory
+require("fzf-lua-explorer").explorer({ cwd = "/path/to/directory" })
 ```
 
 ### Configuration Options
@@ -92,6 +98,7 @@ require("fzf-lua-explorer").setup({
     paste_files = 'ctrl-v',     -- Default: 'ctrl-v'
     clean_clipboard = 'ctrl-e', -- Default: 'ctrl-e'
     go_to_cwd = 'ctrl-h',       -- Default: 'ctrl-g'
+    go_to_parent = 'ctrl-b',    -- Default: 'ctrl-b'
     find_folders = 'ctrl-f',    -- Default: 'ctrl-f'
     delete_files = 'del'        -- Default: 'del'
   },
@@ -139,6 +146,24 @@ require("fzf-lua-explorer").setup({
 :Explorer /path/to/directory
 ```
 
+### Direct API Usage
+
+```lua
+-- Open in current file's directory (default behavior)
+:lua require("fzf-lua-explorer").explorer()
+
+-- Open in project root directory
+:lua require("fzf-lua-explorer").explorer({ cwd = vim.fn.getcwd() })
+
+-- Open in specific directory
+:lua require("fzf-lua-explorer").explorer({ cwd = "/home/user/projects" })
+
+-- Open with custom keybinding
+vim.keymap.set('n', '<leader>fp', function()
+  require("fzf-lua-explorer").explorer({ cwd = vim.fn.getcwd() })
+end, { desc = 'Open explorer in project root' })
+```
+
 ### Default Key Bindings
 
 | Key | Action |
@@ -151,6 +176,7 @@ require("fzf-lua-explorer").setup({
 | `Ctrl+v` | Paste files with conflict resolution |
 | `Ctrl+e` | Clean clipboard |
 | `Ctrl+g` | Go to current working directory |
+| `Ctrl+b` | Go to parent directory |
 | `Ctrl+f` | Find and navigate to folders |
 | `Tab` | Select/deselect multiple files |
 | `DEL` | Delete file(s) |

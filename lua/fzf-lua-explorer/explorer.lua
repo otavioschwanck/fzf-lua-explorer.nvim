@@ -36,6 +36,7 @@ local config = {
         paste_files = 'ctrl-v',
         clean_clipboard = 'ctrl-e',
         go_to_cwd = 'ctrl-g',
+        go_to_parent = 'ctrl-b',
         find_folders = 'ctrl-f',
         delete_files = 'del'
     },
@@ -68,9 +69,9 @@ local explorer_state = {
 -- Generate header with current keybindings
 local function generate_header()
     local kb = config.keybindings
-    return string.format('%s:create %s:rename %s:cut %s:copy\n%s:cwd %s:find folder %s:delete',
+    return string.format('%s:create %s:rename %s:cut %s:copy\n%s:cwd %s:parent %s:find folder %s:delete',
         kb.create_file:upper(), kb.rename_file:upper(), kb.cut_files:upper(),
-        kb.copy_files:upper(), kb.go_to_cwd:upper(),
+        kb.copy_files:upper(), kb.go_to_cwd:upper(), kb.go_to_parent:upper(),
         kb.find_folders:upper(), kb.delete_files:upper()
     )
 end
@@ -1182,6 +1183,22 @@ local function go_to_cwd_action(opts)
     end
 end
 
+local function go_to_parent_action(opts)
+    return function()
+        local parent_dir = vim.fn.fnamemodify(explorer_state.current_dir, ':h')
+        -- Ensure we don't go above root directory
+        if parent_dir ~= explorer_state.current_dir then
+            explorer_state.current_dir = parent_dir
+            vim.schedule(function()
+                M.explorer({ _internal_call = true })  -- Clear query by not passing it
+            end)
+        else
+            vim.notify('Already at root directory', vim.log.levels.INFO)
+            actions.resume()
+        end
+    end
+end
+
 local function find_folders_action(opts)
     return function()
         local cwd = vim.fn.getcwd()
@@ -1364,6 +1381,7 @@ function M.explorer(opts)
             [config.keybindings.paste_files] = paste_files_action(opts),
             [config.keybindings.clean_clipboard] = clean_clipboard_action(opts),
             [config.keybindings.go_to_cwd] = go_to_cwd_action(opts),
+            [config.keybindings.go_to_parent] = go_to_parent_action(opts),
             [config.keybindings.find_folders] = find_folders_action(opts),
             [config.keybindings.delete_files] = delete_files_action(opts)
         }

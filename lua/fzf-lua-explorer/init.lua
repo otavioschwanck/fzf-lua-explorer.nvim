@@ -12,6 +12,7 @@ local default_config = {
         paste_files = 'ctrl-v',
         clean_clipboard = 'ctrl-e',
         go_to_cwd = 'ctrl-g',
+        go_to_parent = 'ctrl-b',
         find_folders = 'ctrl-f',
         delete_files = 'del'
     },
