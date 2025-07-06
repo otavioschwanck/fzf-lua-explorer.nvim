@@ -63,6 +63,11 @@ use {
 }
 ```
 
+
+### Demo
+
+![Demo](https://i.imgur.com/9cFcQHc.gif)
+
 ### Manual Installation
 
 1. Clone this repository to your Neovim plugin directory:
