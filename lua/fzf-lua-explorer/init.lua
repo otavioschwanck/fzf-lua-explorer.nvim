@@ -2,8 +2,32 @@ local explorer = require('fzf-lua-explorer.explorer')
 
 local M = {}
 
+-- Default configuration
+local default_config = {
+    keybindings = {
+        create_file = 'ctrl-a',
+        rename_file = 'ctrl-r',
+        cut_files = 'ctrl-x',
+        copy_files = 'ctrl-y',
+        paste_files = 'ctrl-v',
+        go_to_cwd = 'ctrl-g',
+        find_folders = 'ctrl-f',
+        delete_files = 'del'
+    },
+    show_icons = true
+}
+
+-- Store configuration globally so explorer can access it
+M.config = vim.deepcopy(default_config)
+
 function M.setup(opts)
     opts = opts or {}
+    
+    -- Merge user configuration with defaults
+    M.config = vim.tbl_deep_extend('force', default_config, opts)
+    
+    -- Set the configuration in explorer module
+    explorer.set_config(M.config)
     
     vim.api.nvim_create_user_command('Explorer', function(args)
         local cmd_opts = {}

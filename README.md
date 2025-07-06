@@ -6,13 +6,17 @@ A custom file explorer picker for fzf-lua with comprehensive file management cap
 
 - **Directory Navigation**: Opens in current file directory, starts with `../` for easy navigation
 - **File Creation**: Create new files with `Ctrl+a`
-- **File Renaming**: Rename single or multiple files with `Ctrl+r`
-- **File Operations**: Cut (`Ctrl+x`), Copy (`Ctrl+y`), and Paste (`Ctrl+v`) with confirmation
+- **File Renaming**: Rename single or multiple files with `Ctrl+r` (with conflict resolution)
+- **File Operations**: Cut (`Ctrl+x`), Copy (`Ctrl+y`), and Paste (`Ctrl+v`) with conflict resolution
 - **File Deletion**: Delete files with `DEL` key
 - **Multi-select**: Select multiple files with `Tab`
 - **Quick CWD**: Jump to current working directory with `Ctrl+g`
+- **Folder Search**: Find and navigate to any folder with `Ctrl+f`
+- **Conflict Resolution**: Individual conflict handling for paste and rename operations
+- **Clipboard Buffer**: Visual clipboard showing cut/copied files
 - **Preview**: Built-in file preview support
 - **Icons**: Supports fzf-lua icons (when available)
+- **Customizable Keybindings**: All shortcuts can be customized
 
 ## Installation
 
@@ -69,6 +73,39 @@ require("fzf-lua-explorer").setup({
 require("fzf-lua-explorer").explorer()
 ```
 
+### Configuration Options
+
+```lua
+require("fzf-lua-explorer").setup({
+  -- Main keymap to open explorer (set to false to disable)
+  keymap = "<leader>e",         -- Default: "<leader>e"
+  
+  -- Show file and folder icons
+  show_icons = true,            -- Default: true
+  
+  -- Customize keybindings
+  keybindings = {
+    create_file = 'ctrl-n',     -- Default: 'ctrl-a'
+    rename_file = 'ctrl-r',     -- Default: 'ctrl-r'
+    cut_files = 'ctrl-x',       -- Default: 'ctrl-x'
+    copy_files = 'ctrl-c',      -- Default: 'ctrl-y'
+    paste_files = 'ctrl-v',     -- Default: 'ctrl-v'
+    go_to_cwd = 'ctrl-h',       -- Default: 'ctrl-g'
+    find_folders = 'ctrl-f',    -- Default: 'ctrl-f'
+    delete_files = 'del'        -- Default: 'del'
+  }
+})
+```
+
+### Disabling Icons
+
+```lua
+-- Disable icons for better performance or compatibility
+require("fzf-lua-explorer").setup({
+  show_icons = false
+})
+```
+
 ### Command Usage
 
 ```bash
@@ -79,19 +116,22 @@ require("fzf-lua-explorer").explorer()
 :Explorer /path/to/directory
 ```
 
-### Key Bindings
+### Default Key Bindings
 
 | Key | Action |
 |-----|--------|
 | `Enter` | Open file or navigate into directory |
 | `Ctrl+a` | Create new file |
-| `Ctrl+r` | Rename file(s) |
+| `Ctrl+r` | Rename file(s) with conflict resolution |
 | `Ctrl+x` | Cut file(s) |
 | `Ctrl+y` | Copy file(s) |
-| `Ctrl+v` | Paste files (shows confirmation) |
+| `Ctrl+v` | Paste files with conflict resolution |
 | `Ctrl+g` | Go to current working directory |
+| `Ctrl+f` | Find and navigate to folders |
 | `Tab` | Select/deselect multiple files |
 | `DEL` | Delete file(s) |
+
+*All keybindings are customizable via the `keybindings` option in setup.*
 
 ### Multi-file Operations
 

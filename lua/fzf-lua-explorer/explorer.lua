@@ -26,6 +26,26 @@ end
 
 local M = {}
 
+-- Configuration storage
+local config = {
+    keybindings = {
+        create_file = 'ctrl-a',
+        rename_file = 'ctrl-r',
+        cut_files = 'ctrl-x',
+        copy_files = 'ctrl-y',
+        paste_files = 'ctrl-v',
+        go_to_cwd = 'ctrl-g',
+        find_folders = 'ctrl-f',
+        delete_files = 'del'
+    },
+    show_icons = true
+}
+
+-- Function to set configuration from init.lua
+function M.set_config(user_config)
+    config = vim.tbl_deep_extend('force', config, user_config)
+end
+
 local explorer_state = {
     current_dir = nil,
     cut_files = {},
@@ -34,6 +54,16 @@ local explorer_state = {
     clipboard_win = nil,
     clipboard_buf = nil
 }
+
+-- Generate header with current keybindings
+local function generate_header()
+    local kb = config.keybindings
+    return string.format('%s:create %s:rename %s:cut %s:copy %s:paste %s:cwd %s:find %s:delete',
+        kb.create_file:upper(), kb.rename_file:upper(), kb.cut_files:upper(),
+        kb.copy_files:upper(), kb.paste_files:upper(), kb.go_to_cwd:upper(),
+        kb.find_folders:upper(), kb.delete_files:upper()
+    )
+end
 
 -- Extract filename from make_entry.file formatted entry
 local function extract_filename(entry)
@@ -140,12 +170,12 @@ local function update_clipboard_buffer()
     
     -- Add instructions
     if has_content then
-        table.insert(lines, 'Press Ctrl+v to paste')
+        table.insert(lines, 'Press ' .. config.keybindings.paste_files:upper() .. ' to paste')
     else
         table.insert(lines, 'No files in clipboard')
         table.insert(lines, '')
-        table.insert(lines, 'Ctrl+x: Cut files')
-        table.insert(lines, 'Ctrl+y: Copy files')
+        table.insert(lines, config.keybindings.cut_files:upper() .. ': Cut files')
+        table.insert(lines, config.keybindings.copy_files:upper() .. ': Copy files')
     end
     
     -- Update buffer content
@@ -984,26 +1014,45 @@ function M.explorer(opts)
     local files = get_files_in_dir(current_dir)
     local entries = {}
     
-    -- Normalize opts like files() does
-    local normalized_opts = config.normalize_opts({
-        cwd = current_dir,
-        file_icons = true,
-        color_icons = true
-    }, "files")
-    
-    for _, file in ipairs(files) do
-        -- Use make_entry.file to properly format entries with icons
-        local entry = make_entry.file(file.name, normalized_opts)
-        table.insert(entries, entry)
+    -- Create entries based on icon configuration
+    if config.show_icons then
+        -- Try to get normalized opts, fallback if not available
+        local entry_opts
+        local fzf_config = require('fzf-lua.config')
+        if fzf_config.normalize_opts then
+            entry_opts = fzf_config.normalize_opts({
+                cwd = current_dir,
+                file_icons = true,
+                color_icons = true
+            }, "files")
+        else
+            -- Fallback for older fzf-lua versions
+            entry_opts = {
+                cwd = current_dir,
+                file_icons = true,
+                color_icons = true
+            }
+        end
+        
+        for _, file in ipairs(files) do
+            -- Use make_entry.file to properly format entries with icons
+            local entry = make_entry.file(file.name, entry_opts)
+            table.insert(entries, entry)
+        end
+    else
+        -- Simple entries without icons
+        for _, file in ipairs(files) do
+            table.insert(entries, file.name)
+        end
     end
     
     local fzf_opts = {
         prompt = 'Explorer> ',
         cwd = current_dir,
-        file_icons = true,
-        color_icons = true,
+        file_icons = config.show_icons,
+        color_icons = config.show_icons,
         fzf_opts = {
-            ['--header'] = 'C-a:create C-r:rename C-x:cut C-y:copy C-v:paste C-g:cwd C-f:find DEL:delete',
+            ['--header'] = generate_header(),
             ['--multi'] = true,
             ['--bind'] = 'tab:toggle'
         },
@@ -1047,14 +1096,14 @@ function M.explorer(opts)
                     })
                 end
             end,
-            ['ctrl-a'] = create_file_action(opts),
-            ['ctrl-r'] = rename_file_action(opts),
-            ['ctrl-x'] = cut_files_action(opts),
-            ['ctrl-y'] = copy_files_action(opts),
-            ['ctrl-v'] = paste_files_action(opts),
-            ['ctrl-g'] = go_to_cwd_action(opts),
-            ['ctrl-f'] = find_folders_action(opts),
-            ['del'] = delete_files_action(opts)
+            [config.keybindings.create_file] = create_file_action(opts),
+            [config.keybindings.rename_file] = rename_file_action(opts),
+            [config.keybindings.cut_files] = cut_files_action(opts),
+            [config.keybindings.copy_files] = copy_files_action(opts),
+            [config.keybindings.paste_files] = paste_files_action(opts),
+            [config.keybindings.go_to_cwd] = go_to_cwd_action(opts),
+            [config.keybindings.find_folders] = find_folders_action(opts),
+            [config.keybindings.delete_files] = delete_files_action(opts)
         }
     }
     
