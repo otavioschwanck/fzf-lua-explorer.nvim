@@ -70,7 +70,7 @@ use {
 
 ### Demo
 
-![Demo](https://i.imgur.com/9cFcQHc.gif)
+![Demo](https://i.imgur.com/Sn8LjNf.gif)
 
 ### Manual Installation
 
