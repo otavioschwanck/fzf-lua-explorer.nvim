@@ -30,7 +30,9 @@ local explorer_state = {
     current_dir = nil,
     cut_files = {},
     copy_files = {},
-    operation = nil
+    operation = nil,
+    clipboard_win = nil,
+    clipboard_buf = nil
 }
 
 -- Extract filename from make_entry.file formatted entry
@@ -53,6 +55,131 @@ local function extract_filename(entry)
     -- Fallback: extract just alphabetic/numeric filename part
     local fallback = cleaned:match('([%w%./_-]+)$')
     return fallback or entry
+end
+
+-- Create floating buffer to show clipboard status
+local function create_clipboard_buffer()
+    if explorer_state.clipboard_win and vim.api.nvim_win_is_valid(explorer_state.clipboard_win) then
+        return  -- Already exists
+    end
+    
+    -- Create buffer
+    local buf = vim.api.nvim_create_buf(false, true)
+    explorer_state.clipboard_buf = buf
+    
+    -- Buffer settings
+    vim.api.nvim_buf_set_option(buf, 'bufhidden', 'wipe')
+    vim.api.nvim_buf_set_option(buf, 'filetype', 'fzf-lua-explorer-clipboard')
+    
+    -- Window configuration
+    local width = 40
+    local height = 10
+    local row = 2
+    local col = vim.o.columns - width - 2
+    
+    local win_config = {
+        relative = 'editor',
+        row = row,
+        col = col,
+        width = width,
+        height = height,
+        border = 'rounded',
+        style = 'minimal',
+        title = ' Clipboard ',
+        title_pos = 'center',
+        zindex = 1000  -- High z-index to stay on top
+    }
+    
+    -- Create window
+    local win = vim.api.nvim_open_win(buf, false, win_config)
+    explorer_state.clipboard_win = win
+    
+    -- Window settings
+    vim.api.nvim_win_set_option(win, 'winhl', 'Normal:NormalFloat,FloatBorder:FloatBorder')
+    vim.api.nvim_win_set_option(win, 'wrap', false)
+    vim.api.nvim_win_set_option(win, 'cursorline', false)
+    
+    return buf, win
+end
+
+-- Update clipboard buffer content
+local function update_clipboard_buffer()
+    if not explorer_state.clipboard_buf or not vim.api.nvim_buf_is_valid(explorer_state.clipboard_buf) then
+        return
+    end
+    
+    -- Make buffer modifiable
+    vim.api.nvim_buf_set_option(explorer_state.clipboard_buf, 'modifiable', true)
+    
+    local lines = {}
+    local has_content = false
+    
+    -- Add cut files
+    if #explorer_state.cut_files > 0 then
+        table.insert(lines, '✂️  Cut Files:')
+        for _, file in ipairs(explorer_state.cut_files) do
+            local basename = vim.fn.fnamemodify(file, ':t')
+            table.insert(lines, '  ' .. basename)
+        end
+        table.insert(lines, '')
+        has_content = true
+    end
+    
+    -- Add copy files
+    if #explorer_state.copy_files > 0 then
+        table.insert(lines, '📋 Copy Files:')
+        for _, file in ipairs(explorer_state.copy_files) do
+            local basename = vim.fn.fnamemodify(file, ':t')
+            table.insert(lines, '  ' .. basename)
+        end
+        table.insert(lines, '')
+        has_content = true
+    end
+    
+    -- Add instructions
+    if has_content then
+        table.insert(lines, 'Press Ctrl+v to paste')
+    else
+        table.insert(lines, 'No files in clipboard')
+        table.insert(lines, '')
+        table.insert(lines, 'Ctrl+x: Cut files')
+        table.insert(lines, 'Ctrl+y: Copy files')
+    end
+    
+    -- Update buffer content
+    vim.api.nvim_buf_set_lines(explorer_state.clipboard_buf, 0, -1, false, lines)
+    
+    -- Set buffer as unmodifiable
+    vim.api.nvim_buf_set_option(explorer_state.clipboard_buf, 'modifiable', false)
+end
+
+-- Show clipboard buffer
+local function show_clipboard_buffer()
+    create_clipboard_buffer()
+    update_clipboard_buffer()
+end
+
+-- Bring clipboard buffer to front
+local function bring_clipboard_to_front()
+    if explorer_state.clipboard_win and vim.api.nvim_win_is_valid(explorer_state.clipboard_win) then
+        -- Close existing window
+        vim.api.nvim_win_close(explorer_state.clipboard_win, true)
+        explorer_state.clipboard_win = nil
+    end
+    -- Recreate to bring to front
+    show_clipboard_buffer()
+end
+
+-- Hide clipboard buffer
+local function hide_clipboard_buffer()
+    if explorer_state.clipboard_win and vim.api.nvim_win_is_valid(explorer_state.clipboard_win) then
+        vim.api.nvim_win_close(explorer_state.clipboard_win, true)
+        explorer_state.clipboard_win = nil
+    end
+    if explorer_state.clipboard_buf and vim.api.nvim_buf_is_valid(explorer_state.clipboard_buf) then
+        vim.api.nvim_buf_delete(explorer_state.clipboard_buf, { force = true })
+        explorer_state.clipboard_buf = nil
+    end
 end
 
 local function get_current_file_dir()
@@ -239,7 +366,7 @@ end
 
 local function cut_files_action(opts)
     return function(selected)
-        explorer_state.cut_files = {}
+        -- Clear only copy files, keep existing cut files and add to them
         explorer_state.copy_files = {}
         explorer_state.operation = 'cut'
         
@@ -261,13 +388,17 @@ local function cut_files_action(opts)
         end
         
         vim.notify('Cut ' .. #explorer_state.cut_files .. ' files', vim.log.levels.INFO)
+        show_clipboard_buffer()
+        
+        -- Resume the picker to keep it open
+        actions.resume()
     end
 end
 
 local function copy_files_action(opts)
     return function(selected)
+        -- Clear only cut files, keep existing copy files and add to them  
         explorer_state.cut_files = {}
-        explorer_state.copy_files = {}
         explorer_state.operation = 'copy'
         
         if selected and #selected > 0 then
@@ -288,6 +419,10 @@ local function copy_files_action(opts)
         end
         
         vim.notify('Copied ' .. #explorer_state.copy_files .. ' files', vim.log.levels.INFO)
+        show_clipboard_buffer()
+        
+        -- Resume the picker to keep it open
+        actions.resume()
     end
 end
 
@@ -347,6 +482,7 @@ local function paste_files_action(opts)
                 explorer_state.cut_files = {}
                 explorer_state.copy_files = {}
                 explorer_state.operation = nil
+                hide_clipboard_buffer()
                 
                 vim.schedule(function()
                     M.explorer()
@@ -423,6 +559,11 @@ function M.explorer(opts)
         explorer_state.current_dir = get_current_file_dir()
     end
     
+    -- Show clipboard buffer if there are files in clipboard
+    if #explorer_state.cut_files > 0 or #explorer_state.copy_files > 0 then
+        show_clipboard_buffer()
+    end
+    
     local current_dir = opts.cwd or explorer_state.current_dir
     current_dir = vim.fn.fnamemodify(current_dir, ':p')
     explorer_state.current_dir = current_dir
@@ -454,6 +595,9 @@ function M.explorer(opts)
             ['--bind'] = 'tab:toggle'
         },
         previewer = 'builtin',
+        on_complete = function()
+            hide_clipboard_buffer()
+        end,
         actions = {
             ['default'] = function(selected)
                 if not selected or #selected == 0 then
