@@ -368,15 +368,14 @@ end
 
 local function cut_files_action(opts)
     return function(selected)
-        -- Clear only copy files, keep existing cut files and add to them
-        explorer_state.copy_files = {}
         explorer_state.operation = 'cut'
         
+        local files_to_process = {}
         if selected and #selected > 0 then
             for _, sel in ipairs(selected) do
                 local file_info = extract_filename(sel)
                 if file_info and file_info ~= '../' then
-                    table.insert(explorer_state.cut_files, path.join({explorer_state.current_dir, file_info}))
+                    table.insert(files_to_process, path.join({explorer_state.current_dir, file_info}))
                 end
             end
         else
@@ -384,8 +383,40 @@ local function cut_files_action(opts)
             if current_entry then
                 local file_info = extract_filename(current_entry)
                 if file_info and file_info ~= '../' then
-                    table.insert(explorer_state.cut_files, path.join({explorer_state.current_dir, file_info}))
+                    table.insert(files_to_process, path.join({explorer_state.current_dir, file_info}))
                 end
+            end
+        end
+        
+        for _, file_path in ipairs(files_to_process) do
+            -- Check if file is already in cut list
+            local cut_index = nil
+            for i, cut_file in ipairs(explorer_state.cut_files) do
+                if cut_file == file_path then
+                    cut_index = i
+                    break
+                end
+            end
+            
+            -- Check if file is in copy list
+            local copy_index = nil
+            for i, copy_file in ipairs(explorer_state.copy_files) do
+                if copy_file == file_path then
+                    copy_index = i
+                    break
+                end
+            end
+            
+            if cut_index then
+                -- File already in cut list, remove it (toggle off)
+                table.remove(explorer_state.cut_files, cut_index)
+            else
+                -- File not in cut list, add it
+                if copy_index then
+                    -- Remove from copy list first
+                    table.remove(explorer_state.copy_files, copy_index)
+                end
+                table.insert(explorer_state.cut_files, file_path)
             end
         end
         
@@ -399,15 +430,14 @@ end
 
 local function copy_files_action(opts)
     return function(selected)
-        -- Clear only cut files, keep existing copy files and add to them  
-        explorer_state.cut_files = {}
         explorer_state.operation = 'copy'
         
+        local files_to_process = {}
         if selected and #selected > 0 then
             for _, sel in ipairs(selected) do
                 local file_info = extract_filename(sel)
                 if file_info and file_info ~= '../' then
-                    table.insert(explorer_state.copy_files, path.join({explorer_state.current_dir, file_info}))
+                    table.insert(files_to_process, path.join({explorer_state.current_dir, file_info}))
                 end
             end
         else
@@ -415,8 +445,40 @@ local function copy_files_action(opts)
             if current_entry then
                 local file_info = extract_filename(current_entry)
                 if file_info and file_info ~= '../' then
-                    table.insert(explorer_state.copy_files, path.join({explorer_state.current_dir, file_info}))
+                    table.insert(files_to_process, path.join({explorer_state.current_dir, file_info}))
                 end
+            end
+        end
+        
+        for _, file_path in ipairs(files_to_process) do
+            -- Check if file is already in copy list
+            local copy_index = nil
+            for i, copy_file in ipairs(explorer_state.copy_files) do
+                if copy_file == file_path then
+                    copy_index = i
+                    break
+                end
+            end
+            
+            -- Check if file is in cut list
+            local cut_index = nil
+            for i, cut_file in ipairs(explorer_state.cut_files) do
+                if cut_file == file_path then
+                    cut_index = i
+                    break
+                end
+            end
+            
+            if copy_index then
+                -- File already in copy list, remove it (toggle off)
+                table.remove(explorer_state.copy_files, copy_index)
+            else
+                -- File not in copy list, add it
+                if cut_index then
+                    -- Remove from cut list first
+                    table.remove(explorer_state.cut_files, cut_index)
+                end
+                table.insert(explorer_state.copy_files, file_path)
             end
         end
         
