@@ -892,6 +892,71 @@ local function go_to_cwd_action(opts)
     end
 end
 
+local function find_folders_action(opts)
+    return function()
+        local cwd = vim.fn.getcwd()
+        
+        -- Use find command to get all directories recursively
+        local find_cmd = 'find "' .. cwd .. '" -type d -not -path "*/.*" 2>/dev/null'
+        local find_result = vim.fn.system(find_cmd)
+        
+        if vim.v.shell_error ~= 0 then
+            vim.notify('Failed to find folders', vim.log.levels.ERROR)
+            return
+        end
+        
+        local folders = {}
+        for folder in find_result:gmatch('[^\r\n]+') do
+            if folder ~= cwd then  -- Skip the root directory
+                -- Make paths relative to cwd for display
+                local relative_path = folder:gsub('^' .. vim.pesc(cwd) .. '/?', '')
+                if relative_path ~= '' then
+                    table.insert(folders, relative_path)
+                end
+            end
+        end
+        
+        if #folders == 0 then
+            vim.notify('No folders found', vim.log.levels.WARN)
+            return
+        end
+        
+        -- Sort folders alphabetically
+        table.sort(folders)
+        
+        local fzf_opts = {
+            prompt = 'Find Folders> ',
+            fzf_opts = {
+                ['--header'] = 'Select folder to open in explorer'
+            },
+            actions = {
+                ['default'] = function(selected)
+                    if not selected or #selected == 0 then
+                        return
+                    end
+                    
+                    local folder = selected[1]
+                    local full_path = path.join({cwd, folder})
+                    
+                    -- Check if folder still exists
+                    if vim.fn.isdirectory(full_path) == 0 then
+                        vim.notify('Folder no longer exists: ' .. folder, vim.log.levels.ERROR)
+                        return
+                    end
+                    
+                    -- Open explorer in selected folder
+                    explorer_state.current_dir = vim.fn.fnamemodify(full_path, ':p')
+                    vim.schedule(function()
+                        M.explorer({ _internal_call = true })
+                    end)
+                end
+            }
+        }
+        
+        core.fzf_exec(folders, fzf_opts)
+    end
+end
+
 function M.explorer(opts)
     opts = opts or {}
     
@@ -938,7 +1003,7 @@ function M.explorer(opts)
         file_icons = true,
         color_icons = true,
         fzf_opts = {
-            ['--header'] = 'C-a:create C-r:rename C-x:cut C-y:copy C-v:paste C-g:cwd DEL:delete',
+            ['--header'] = 'C-a:create C-r:rename C-x:cut C-y:copy C-v:paste C-g:cwd C-f:find DEL:delete',
             ['--multi'] = true,
             ['--bind'] = 'tab:toggle'
         },
@@ -988,6 +1053,7 @@ function M.explorer(opts)
             ['ctrl-y'] = copy_files_action(opts),
             ['ctrl-v'] = paste_files_action(opts),
             ['ctrl-g'] = go_to_cwd_action(opts),
+            ['ctrl-f'] = find_folders_action(opts),
             ['del'] = delete_files_action(opts)
         }
     }
