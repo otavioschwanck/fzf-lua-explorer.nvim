@@ -11,6 +11,7 @@ Perfect for developers who want a **keyboard-driven file manager** that integrat
 - **Keyboard-driven**: All operations accessible via customizable shortcuts
 - **Instant preview**: Built-in file preview support
 - **Smart navigation**: Opens in current file directory with `../` for quick parent access
+- **Project-wide folder search**: Use `Ctrl+F` to instantly search and jump to any folder in your entire project tree
 
 ### 📁 **Comprehensive File Management**
 - **Multi-file operations**: Select multiple files with `Tab` for batch operations
@@ -201,7 +202,7 @@ end, { desc = 'Open explorer in project root' })
 | `Ctrl+e` | Clean clipboard |
 | `Ctrl+g` | Go to current working directory |
 | `Ctrl+b` | Go to parent directory |
-| `Ctrl+f` | Find and navigate to folders |
+| `Ctrl+f` | Search all project folders and jump to any directory instantly |
 | `Tab` | Select/deselect multiple files |
 | `DEL` | Delete file(s) |
 
