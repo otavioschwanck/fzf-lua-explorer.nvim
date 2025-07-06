@@ -1369,8 +1369,15 @@ function M.explorer(opts)
     end
   end
 
+  -- Create prompt showing current directory (relative to cwd when inside, full path when outside)
+  local prompt_dir = path.relative_to(current_dir, vim.fn.getcwd()) or current_dir
+  prompt_dir = prompt_dir:gsub('/$', '') -- Remove trailing slash for cleaner display
+  if prompt_dir == '' then
+    prompt_dir = '.'
+  end
+  
   local fzf_opts = {
-    prompt = 'Explorer> ',
+    prompt = prompt_dir .. '> ',
     cwd = current_dir,
     file_icons = config.show_icons,
     color_icons = config.show_icons,
