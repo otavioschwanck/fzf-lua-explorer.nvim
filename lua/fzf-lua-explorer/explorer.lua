@@ -311,13 +311,41 @@ local function rename_file_action(opts)
             }, function(new_name)
                 if new_name and new_name ~= '' and new_name ~= old_name then
                     local new_path = path.join({explorer_state.current_dir, new_name})
-                    local success = vim.loop.fs_rename(old_path, new_path)
-                    if success then
-                        vim.schedule(function()
-                            M.explorer({ _internal_call = true })
+                    
+                    -- Check if target already exists
+                    if vim.fn.filereadable(new_path) == 1 or vim.fn.isdirectory(new_path) == 1 then
+                        vim.ui.input({
+                            prompt = string.format('File "%s" already exists. Replace it? (y/n): ', new_name)
+                        }, function(choice)
+                            if choice and choice:lower() == 'y' then
+                                -- Remove existing file/directory first
+                                local rm_result = vim.fn.system('rm -rf "' .. new_path .. '"')
+                                if vim.v.shell_error ~= 0 then
+                                    vim.notify('Failed to remove existing file: ' .. rm_result, vim.log.levels.ERROR)
+                                    return
+                                end
+                                
+                                -- Proceed with rename
+                                local success = vim.loop.fs_rename(old_path, new_path)
+                                if success then
+                                    vim.schedule(function()
+                                        M.explorer({ _internal_call = true })
+                                    end)
+                                else
+                                    vim.notify('Failed to rename file', vim.log.levels.ERROR)
+                                end
+                            end
                         end)
                     else
-                        vim.notify('Failed to rename file', vim.log.levels.ERROR)
+                        -- No conflict, proceed with rename
+                        local success = vim.loop.fs_rename(old_path, new_path)
+                        if success then
+                            vim.schedule(function()
+                                M.explorer({ _internal_call = true })
+                            end)
+                        else
+                            vim.notify('Failed to rename file', vim.log.levels.ERROR)
+                        end
                     end
                 end
             end)
@@ -342,22 +370,97 @@ local function rename_file_action(opts)
                         return
                     end
                     
+                    -- First pass: collect all operations and conflicts
+                    local operations = {}
+                    local conflicts = {}
+                    
                     for i, old_name in ipairs(files_to_rename) do
                         local new_name = new_names[i]
                         if new_name and new_name ~= old_name then
                             local old_path = path.join({explorer_state.current_dir, old_name})
                             local new_path = path.join({explorer_state.current_dir, new_name})
-                            local success = vim.loop.fs_rename(old_path, new_path)
-                            if not success then
-                                vim.notify('Failed to rename: ' .. old_name, vim.log.levels.ERROR)
+                            
+                            local op = {
+                                old_name = old_name,
+                                new_name = new_name,
+                                old_path = old_path,
+                                new_path = new_path,
+                                has_conflict = vim.fn.filereadable(new_path) == 1 or vim.fn.isdirectory(new_path) == 1
+                            }
+                            
+                            table.insert(operations, op)
+                            if op.has_conflict then
+                                table.insert(conflicts, op)
                             end
                         end
                     end
                     
+                    -- Close the buffer first
                     vim.api.nvim_buf_delete(buf, {force = true})
-                    vim.schedule(function()
-                        M.explorer({ _internal_call = true })
-                    end)
+                    
+                    -- If there are conflicts, resolve them first
+                    if #conflicts > 0 then
+                        local function resolve_rename_conflicts(conflict_index)
+                            if conflict_index > #conflicts then
+                                -- All conflicts resolved, execute all operations
+                                for _, op in ipairs(operations) do
+                                    if not op.skip then
+                                        local success = vim.loop.fs_rename(op.old_path, op.new_path)
+                                        if not success then
+                                            vim.notify('Failed to rename: ' .. op.old_name, vim.log.levels.ERROR)
+                                        end
+                                    end
+                                end
+                                
+                                vim.schedule(function()
+                                    M.explorer({ _internal_call = true })
+                                end)
+                                return
+                            end
+                            
+                            local conflict = conflicts[conflict_index]
+                            vim.ui.input({
+                                prompt = string.format('File "%s" already exists. Replace it? (y/n/c): ', conflict.new_name)
+                            }, function(choice)
+                                if choice and choice:lower() == 'y' then
+                                    -- Remove existing file/directory first
+                                    local rm_result = vim.fn.system('rm -rf "' .. conflict.new_path .. '"')
+                                    if vim.v.shell_error ~= 0 then
+                                        vim.notify('Failed to remove existing file: ' .. rm_result, vim.log.levels.ERROR)
+                                        conflict.skip = true
+                                    end
+                                elseif choice and choice:lower() == 'c' then
+                                    -- Cancel all remaining operations
+                                    vim.notify('Batch rename cancelled', vim.log.levels.INFO)
+                                    vim.schedule(function()
+                                        M.explorer({ _internal_call = true })
+                                    end)
+                                    return
+                                else
+                                    -- Skip this rename (n or anything else)
+                                    conflict.skip = true
+                                end
+                                
+                                -- Continue with next conflict
+                                resolve_rename_conflicts(conflict_index + 1)
+                            end)
+                        end
+                        
+                        -- Start resolving conflicts
+                        resolve_rename_conflicts(1)
+                    else
+                        -- No conflicts, execute all operations immediately
+                        for _, op in ipairs(operations) do
+                            local success = vim.loop.fs_rename(op.old_path, op.new_path)
+                            if not success then
+                                vim.notify('Failed to rename: ' .. op.old_name, vim.log.levels.ERROR)
+                            end
+                        end
+                        
+                        vim.schedule(function()
+                            M.explorer({ _internal_call = true })
+                        end)
+                    end
                 end
             })
             
