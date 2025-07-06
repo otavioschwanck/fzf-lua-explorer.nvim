@@ -110,16 +110,18 @@ require("fzf-lua-explorer").setup({
   
   -- Customize keybindings
   keybindings = {
-    create_file = 'ctrl-n',     -- Default: 'ctrl-a'
-    rename_file = 'ctrl-r',     -- Default: 'ctrl-r'
-    cut_files = 'ctrl-x',       -- Default: 'ctrl-x'
-    copy_files = 'ctrl-c',      -- Default: 'ctrl-y'
-    paste_files = 'ctrl-v',     -- Default: 'ctrl-v'
-    clean_clipboard = 'ctrl-e', -- Default: 'ctrl-e'
-    go_to_cwd = 'ctrl-h',       -- Default: 'ctrl-g'
-    go_to_parent = 'ctrl-b',    -- Default: 'ctrl-b'
-    find_folders = 'ctrl-f',    -- Default: 'ctrl-f'
-    delete_files = 'del'        -- Default: 'del'
+    create_file = 'ctrl-a',
+    rename_file = 'ctrl-r',
+    cut_files = 'ctrl-x',
+    copy_files = 'ctrl-y',
+    paste_files = 'ctrl-v',
+    clean_clipboard = 'ctrl-e',
+    go_to_cwd = 'ctrl-g',
+    go_to_parent = 'ctrl-b',
+    find_folders = 'ctrl-f',
+    delete_files = 'del',
+    open_vsplit = 'ctrl-s',
+    open_hsplit = 'ctrl-h'
   },
   
   -- Customize clipboard buffer
@@ -197,6 +199,8 @@ end, { desc = 'Open explorer in project root' })
 | `Ctrl+g` | Go to current working directory |
 | `Ctrl+b` | Go to parent directory |
 | `Ctrl+f` | Search all project folders and jump to any directory instantly |
+| `Ctrl+s` | Open file in vertical split |
+| `Ctrl+h` | Open file in horizontal split |
 | `Tab` | Select/deselect multiple files |
 | `DEL` | Delete file(s) |
 

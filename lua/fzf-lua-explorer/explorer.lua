@@ -17,7 +17,9 @@ local config = {
     go_to_cwd = 'ctrl-g',
     go_to_parent = 'ctrl-b',
     find_folders = 'ctrl-f',
-    delete_files = 'del'
+    delete_files = 'del',
+    open_vsplit = 'ctrl-s',
+    open_hsplit = 'ctrl-h'
   },
   show_icons = true,
   clipboard_buffer = {
@@ -1250,7 +1252,9 @@ local function find_folders_action(opts)
     local cwd = vim.fn.getcwd()
 
     -- Use find command to get all directories recursively
-    local find_cmd = 'find "' .. cwd .. '" -type d -not -path "*/.*" 2>/dev/null'
+    -- Only exclude hidden dirs if we're not already in one
+    local exclude_hidden = not cwd:match('/%.') and '-not -path "*/.*"' or ''
+    local find_cmd = 'find "' .. cwd .. '" -type d ' .. exclude_hidden .. ' 2>/dev/null'
     local find_result = vim.fn.system(find_cmd)
 
     if vim.v.shell_error ~= 0 then
@@ -1270,7 +1274,7 @@ local function find_folders_action(opts)
     end
 
     if #folders == 0 then
-      vim.notify('No folders found', vim.log.levels.WARN)
+      vim.notify('No folders found in ' .. cwd, vim.log.levels.WARN)
       return
     end
 
@@ -1307,6 +1311,60 @@ local function find_folders_action(opts)
     }
 
     core.fzf_exec(folders, fzf_opts)
+  end
+end
+
+local function open_vsplit_action(opts)
+  return function(selected, _opts)
+    -- Get the current entry from the selection or from fzf
+    local entry = selected and selected[1] or _opts and _opts.last_query
+    if not entry and _opts and _opts.fzf_line then
+      entry = _opts.fzf_line
+    end
+
+    if entry then
+      local file_info = extract_filename(entry)
+      if file_info and file_info ~= '../' then
+        local file_path = path.join({ explorer_state.current_dir, file_info })
+        -- Remove trailing slash if it's a directory
+        file_path = file_path:gsub('/$', '')
+
+        if vim.fn.isdirectory(file_path) == 0 then
+          vim.cmd('vsplit ' .. vim.fn.fnameescape(file_path))
+        else
+          vim.notify('Cannot open directory in split', vim.log.levels.WARN)
+        end
+      end
+    else
+      vim.notify('No file selected', vim.log.levels.WARN)
+    end
+  end
+end
+
+local function open_hsplit_action(opts)
+  return function(selected, _opts)
+    -- Get the current entry from the selection or from fzf
+    local entry = selected and selected[1] or _opts and _opts.last_query
+    if not entry and _opts and _opts.fzf_line then
+      entry = _opts.fzf_line
+    end
+
+    if entry then
+      local file_info = extract_filename(entry)
+      if file_info and file_info ~= '../' then
+        local file_path = path.join({ explorer_state.current_dir, file_info })
+        -- Remove trailing slash if it's a directory
+        file_path = file_path:gsub('/$', '')
+
+        if vim.fn.isdirectory(file_path) == 0 then
+          vim.cmd('split ' .. vim.fn.fnameescape(file_path))
+        else
+          vim.notify('Cannot open directory in split', vim.log.levels.WARN)
+        end
+      end
+    else
+      vim.notify('No file selected', vim.log.levels.WARN)
+    end
   end
 end
 
@@ -1375,7 +1433,7 @@ function M.explorer(opts)
   if prompt_dir == '' then
     prompt_dir = '.'
   end
-  
+
   local fzf_opts = {
     prompt = prompt_dir .. '> ',
     cwd = current_dir,
@@ -1425,7 +1483,9 @@ function M.explorer(opts)
       [config.keybindings.go_to_cwd] = go_to_cwd_action(opts),
       [config.keybindings.go_to_parent] = go_to_parent_action(opts),
       [config.keybindings.find_folders] = find_folders_action(opts),
-      [config.keybindings.delete_files] = delete_files_action(opts)
+      [config.keybindings.delete_files] = delete_files_action(opts),
+      [config.keybindings.open_vsplit] = open_vsplit_action(opts),
+      [config.keybindings.open_hsplit] = open_hsplit_action(opts)
     }
   }
 
