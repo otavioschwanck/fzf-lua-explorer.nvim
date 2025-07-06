@@ -336,6 +336,26 @@ local function create_file_action(opts)
     end
 end
 
+-- Generate unique filename by adding suffix
+local function generate_unique_name(filename, directory)
+    local base, ext = filename:match('^(.-)(%.[^%.]*%.?)$')
+    if not base then
+        base = filename
+        ext = ''
+    end
+    
+    local counter = 1
+    local new_name = filename
+    
+    while vim.fn.filereadable(path.join({directory, new_name})) == 1 or 
+          vim.fn.isdirectory(path.join({directory, new_name})) == 1 do
+        new_name = base .. '_' .. counter .. ext
+        counter = counter + 1
+    end
+    
+    return new_name
+end
+
 local function rename_file_action(opts)
     return function(selected, _opts)
         -- Capture current search query from fzf state
@@ -404,21 +424,38 @@ local function rename_file_action(opts)
                 
                 -- Check if target already exists
                 if vim.fn.filereadable(new_path) == 1 or vim.fn.isdirectory(new_path) == 1 then
+                    local is_source_dir = vim.fn.isdirectory(old_path) == 1
+                    local is_target_dir = vim.fn.isdirectory(new_path) == 1
+                    
+                    -- Different options based on whether we're dealing with directories
+                    local prompt_message
+                    local options
+                    if is_source_dir and is_target_dir then
+                        prompt_message = string.format('Directory "%s" already exists. Choose action:', new_name)
+                        options = '[r] Replace  [m] Merge  [n] Rename  [c] Cancel'
+                    else
+                        prompt_message = string.format('File "%s" already exists. Choose action:', new_name)
+                        options = '[r] Replace  [n] Rename  [c] Cancel'
+                    end
+                    
                     vim.ui.input({
-                        prompt = string.format('File "%s" already exists. Replace it? (y/n): ', new_name)
+                        prompt = prompt_message .. '\n' .. options .. '\n> '
                     }, function(choice)
-                        if choice and choice:lower() == 'y' then
-                            -- Remove existing file/directory first
+                        if not choice or choice:lower() == 'c' then
+                            -- Cancel - resume picker
+                            actions.resume()
+                            return
+                        elseif choice:lower() == 'r' then
+                            -- Replace - remove existing and rename
                             local rm_result = vim.fn.system('rm -rf "' .. new_path .. '"')
                             if vim.v.shell_error ~= 0 then
                                 vim.notify('Failed to remove existing file: ' .. rm_result, vim.log.levels.ERROR)
+                                actions.resume()
                                 return
                             end
                             
-                            -- Proceed with rename
                             local success = vim.loop.fs_rename(old_path, new_path)
                             if success then
-                                -- Refresh the explorer with preserved search query
                                 vim.schedule(function()
                                     M.explorer({ _internal_call = true, query = current_query })
                                 end)
@@ -426,6 +463,56 @@ local function rename_file_action(opts)
                                 vim.notify('Failed to rename file', vim.log.levels.ERROR)
                                 actions.resume()
                             end
+                        elseif choice:lower() == 'm' and is_source_dir and is_target_dir then
+                            -- Merge directories
+                            local merge_result = vim.fn.system('cp -r "' .. old_path .. '/." "' .. new_path .. '/"')
+                            if vim.v.shell_error ~= 0 then
+                                vim.notify('Failed to merge directories: ' .. merge_result, vim.log.levels.ERROR)
+                                actions.resume()
+                                return
+                            end
+                            
+                            -- Remove source directory after successful merge
+                            local rm_result = vim.fn.system('rm -rf "' .. old_path .. '"')
+                            if vim.v.shell_error ~= 0 then
+                                vim.notify('Warning: Merge succeeded but failed to remove source: ' .. rm_result, vim.log.levels.WARN)
+                            end
+                            
+                            vim.notify('Directories merged successfully', vim.log.levels.INFO)
+                            vim.schedule(function()
+                                M.explorer({ _internal_call = true, query = current_query })
+                            end)
+                        elseif choice:lower() == 'n' then
+                            -- Rename - suggest a new name
+                            local suggested_name = generate_unique_name(clean_new_name, explorer_state.current_dir)
+                            if is_folder then
+                                suggested_name = suggested_name .. '/'
+                            end
+                            
+                            vim.ui.input({
+                                prompt = 'Rename to: ',
+                                default = suggested_name
+                            }, function(final_name)
+                                if final_name and final_name ~= '' then
+                                    local final_clean_name = final_name:gsub('/$', '')
+                                    local final_path = path.join({explorer_state.current_dir, final_clean_name})
+                                    
+                                    local success = vim.loop.fs_rename(old_path, final_path)
+                                    if success then
+                                        vim.schedule(function()
+                                            M.explorer({ _internal_call = true, query = current_query })
+                                        end)
+                                    else
+                                        vim.notify('Failed to rename file', vim.log.levels.ERROR)
+                                        actions.resume()
+                                    end
+                                else
+                                    actions.resume()
+                                end
+                            end)
+                        else
+                            vim.notify('Invalid choice. Please choose r, m, n, or c.', vim.log.levels.WARN)
+                            actions.resume()
                         end
                     end)
                 else
@@ -514,9 +601,18 @@ local function rename_file_action(opts)
                                 -- All conflicts resolved, execute all operations
                                 for _, op in ipairs(operations) do
                                     if not op.skip then
-                                        local success = vim.loop.fs_rename(op.old_path, op.new_path)
-                                        if not success then
-                                            vim.notify('Failed to rename: ' .. op.old_name, vim.log.levels.ERROR)
+                                        if op.merge_source_remove then
+                                            -- This was a merge operation, just remove the source
+                                            local rm_result = vim.fn.system('rm -rf "' .. op.merge_source_remove .. '"')
+                                            if vim.v.shell_error ~= 0 then
+                                                vim.notify('Warning: Merge succeeded but failed to remove source: ' .. rm_result, vim.log.levels.WARN)
+                                            end
+                                        else
+                                            -- Normal rename operation
+                                            local success = vim.loop.fs_rename(op.old_path, op.new_path)
+                                            if not success then
+                                                vim.notify('Failed to rename: ' .. op.old_name, vim.log.levels.ERROR)
+                                            end
                                         end
                                     end
                                 end
@@ -528,15 +624,39 @@ local function rename_file_action(opts)
                             end
                             
                             local conflict = conflicts[conflict_index]
+                            local is_source_dir = vim.fn.isdirectory(conflict.old_path) == 1
+                            local is_target_dir = vim.fn.isdirectory(conflict.new_path) == 1
+                            
+                            -- Different options based on whether we're dealing with directories
+                            local prompt_message
+                            local options
+                            if is_source_dir and is_target_dir then
+                                prompt_message = string.format('Directory "%s" already exists. Choose action:', conflict.new_name)
+                                options = '[r] Replace  [m] Merge  [s] Skip  [c] Cancel all'
+                            else
+                                prompt_message = string.format('File "%s" already exists. Choose action:', conflict.new_name)
+                                options = '[r] Replace  [s] Skip  [c] Cancel all'
+                            end
+                            
                             vim.ui.input({
-                                prompt = string.format('File "%s" already exists. Replace it? (y/n/c): ', conflict.new_name)
+                                prompt = prompt_message .. '\n' .. options .. '\n> '
                             }, function(choice)
-                                if choice and choice:lower() == 'y' then
-                                    -- Remove existing file/directory first
+                                if choice and choice:lower() == 'r' then
+                                    -- Replace - remove existing file/directory first
                                     local rm_result = vim.fn.system('rm -rf "' .. conflict.new_path .. '"')
                                     if vim.v.shell_error ~= 0 then
                                         vim.notify('Failed to remove existing file: ' .. rm_result, vim.log.levels.ERROR)
                                         conflict.skip = true
+                                    end
+                                elseif choice and choice:lower() == 'm' and is_source_dir and is_target_dir then
+                                    -- Merge directories
+                                    local merge_result = vim.fn.system('cp -r "' .. conflict.old_path .. '/." "' .. conflict.new_path .. '/"')
+                                    if vim.v.shell_error ~= 0 then
+                                        vim.notify('Failed to merge directories: ' .. merge_result, vim.log.levels.ERROR)
+                                        conflict.skip = true
+                                    else
+                                        -- Mark for source removal after merge
+                                        conflict.merge_source_remove = conflict.old_path
                                     end
                                 elseif choice and choice:lower() == 'c' then
                                     -- Cancel all remaining operations
@@ -546,7 +666,7 @@ local function rename_file_action(opts)
                                     end)
                                     return
                                 else
-                                    -- Skip this rename (n or anything else)
+                                    -- Skip this rename (s or anything else)
                                     conflict.skip = true
                                 end
                                 
@@ -708,25 +828,6 @@ local function copy_files_action(opts)
     end
 end
 
--- Generate unique filename by adding suffix
-local function generate_unique_name(filename, directory)
-    local base, ext = filename:match('^(.-)(%.[^%.]*%.?)$')
-    if not base then
-        base = filename
-        ext = ''
-    end
-    
-    local counter = 1
-    local new_name = filename
-    
-    while vim.fn.filereadable(path.join({directory, new_name})) == 1 or 
-          vim.fn.isdirectory(path.join({directory, new_name})) == 1 do
-        new_name = base .. '_' .. counter .. ext
-        counter = counter + 1
-    end
-    
-    return new_name
-end
 
 -- Execute paste operations
 local function execute_paste_operations(operations, operation, query)
