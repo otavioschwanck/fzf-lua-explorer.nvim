@@ -212,18 +212,6 @@ end, { desc = 'Open explorer in project root' })
 - Operations like rename, cut, copy, and delete work on selected files
 - For renaming multiple files, a buffer opens allowing you to edit all names at once
 
-### Testing
-
-Run the test suite:
-
-```lua
--- Create test environment
-lua require('fzf-lua-explorer.tests').test_explorer()
-
--- Run basic tests
-lua require('fzf-lua-explorer.tests').run_basic_tests()
-```
-
 ## Requirements
 
 - fzf-lua
