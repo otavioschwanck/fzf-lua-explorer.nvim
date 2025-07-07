@@ -22,6 +22,7 @@ local config = {
     open_hsplit = 'ctrl-h'
   },
   show_icons = true,
+  create_file_from_input = false,
   clipboard_buffer = {
     enabled = true,
     min_width = 40,
@@ -319,6 +320,53 @@ local function get_files_in_dir(dir)
   return files
 end
 
+-- Helper function to create file with given input
+local function create_file_with_input(input, current_query)
+  local current_dir = explorer_state.current_dir
+  local clean_dir = vim.fn.fnamemodify(current_dir, ':p')
+  
+  if not input or input == '' then
+    -- Return to explorer if no input
+    vim.schedule(function()
+      M.explorer({ _internal_call = true, query = current_query })
+    end)
+    return
+  end
+
+  local file_path = input
+
+  if not vim.startswith(file_path, '/') then
+    file_path = path.join({ clean_dir, file_path })
+  end
+
+  file_path = vim.fn.fnamemodify(file_path, ':p')
+
+  -- Check if file already exists
+  if vim.fn.filereadable(file_path) == 1 or vim.fn.isdirectory(file_path) == 1 then
+    vim.notify('File already exists: ' .. vim.fn.fnamemodify(file_path, ':t'), vim.log.levels.ERROR)
+    -- Return to explorer with query preserved
+    vim.schedule(function()
+      M.explorer({ _internal_call = true, query = current_query })
+    end)
+    return
+  end
+
+  local dir = vim.fn.fnamemodify(file_path, ':h')
+  vim.fn.mkdir(dir, 'p')
+
+  local file = io.open(file_path, 'w')
+  if file then
+    file:close()
+    vim.cmd('edit ' .. vim.fn.fnameescape(file_path))
+  else
+    vim.notify('Failed to create file: ' .. file_path, vim.log.levels.ERROR)
+    -- Return to explorer even on failure
+    vim.schedule(function()
+      M.explorer({ _internal_call = true, query = current_query })
+    end)
+  end
+end
+
 local function create_file_action(opts)
   return function(selected, _opts)
     -- Capture current search query from fzf state
@@ -329,6 +377,14 @@ local function create_file_action(opts)
     local current_dir = explorer_state.current_dir
     local clean_dir = vim.fn.fnamemodify(current_dir, ':p')
 
+    -- Check if create_file_from_input is enabled and we have a query
+    if config.create_file_from_input and current_query ~= "" then
+      -- Create file directly from query input
+      create_file_with_input(current_query, current_query)
+      return
+    end
+
+    -- Traditional behavior: show input prompt
     vim.ui.input({
       prompt = 'Create file: ',
       default = clean_dir
@@ -341,30 +397,7 @@ local function create_file_action(opts)
         return
       end
 
-      if input and input ~= '' then
-        local file_path = input
-
-        if not vim.startswith(file_path, '/') then
-          file_path = path.join({ clean_dir, file_path })
-        end
-
-        file_path = vim.fn.fnamemodify(file_path, ':p')
-
-        local dir = vim.fn.fnamemodify(file_path, ':h')
-        vim.fn.mkdir(dir, 'p')
-
-        local file = io.open(file_path, 'w')
-        if file then
-          file:close()
-          vim.cmd('edit ' .. vim.fn.fnameescape(file_path))
-        else
-          vim.notify('Failed to create file: ' .. file_path, vim.log.levels.ERROR)
-          -- Return to explorer even on failure
-          vim.schedule(function()
-            M.explorer({ _internal_call = true, query = current_query })
-          end)
-        end
-      end
+      create_file_with_input(input, current_query)
     end)
   end
 end

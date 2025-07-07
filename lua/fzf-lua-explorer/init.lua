@@ -17,6 +17,7 @@ local default_config = {
     delete_files = 'del'
   },
   show_icons = true,
+  create_file_from_input = false, -- If true, create file directly from query input
   clipboard_buffer = {
     enabled = true,    -- Show clipboard buffer
     min_width = 40,    -- Minimum width of clipboard buffer

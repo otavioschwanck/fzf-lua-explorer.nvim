@@ -108,6 +108,9 @@ require("fzf-lua-explorer").setup({
   -- Show file and folder icons
   show_icons = true,            -- Default: true
   
+  -- Create files directly from input query
+  create_file_from_input = false, -- Default: false
+  
   -- Customize keybindings
   keybindings = {
     create_file = 'ctrl-a',
