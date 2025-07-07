@@ -65,19 +65,26 @@ local function extract_filename(entry)
   end
 
   -- Remove ANSI escape codes and extract filename
-  -- Pattern: \27[...m icon \27[0m filename
   local cleaned = entry:gsub('\27%[[0-9;]*m', '') -- Remove all ANSI codes
 
-  -- The cleaned string should be: icon + space + filename
-  -- Extract everything after the icon and space
-  local filename = cleaned:match('^.%s(.+)$')
-  if filename then
-    return filename
+  if config.show_icons then
+    -- When icons are enabled, format is: icon + space + filename
+    -- The icon might be Unicode, so look for the first ASCII letter or common filename char
+    local filename = cleaned:match('[%s]*([%w%s%p]+)$') -- Skip leading chars until we hit filename
+    if filename then
+      filename = filename:match('^%s*(.-)%s*$')         -- Trim whitespace
+      return filename
+    end
+  else
+    -- When no icons, try to extract filename normally
+    local filename = cleaned:match('^%s*(.-)%s*$') -- Trim whitespace
+    if filename and filename ~= '' then
+      return filename
+    end
   end
 
-  -- Fallback: extract just alphabetic/numeric filename part
-  local fallback = cleaned:match('([%w%./_-]+)$')
-  return fallback or entry
+  -- Fallback: return cleaned entry
+  return cleaned
 end
 
 -- Calculate dynamic width based on content
@@ -1467,7 +1474,7 @@ function M.explorer(opts)
               local file_path = path.join({ current_dir, file_info })
               file_path = vim.fn.fnamemodify(file_path, ':p')
               local file_type = get_file_type(file_path)
-              
+
               -- Only add regular files to quickfix, skip directories
               if file_type == 'file' then
                 table.insert(files, {
@@ -1479,7 +1486,7 @@ function M.explorer(opts)
               end
             end
           end
-          
+
           if #files > 0 then
             vim.fn.setqflist(files, 'r')
             vim.cmd('copen')
@@ -1524,7 +1531,7 @@ function M.explorer(opts)
 
   -- Store the original fzf state for resume detection
   explorer_state.last_fzf_opts = fzf_opts
-  
+
   -- Hook into fzf completion to detect resume
   local original_on_complete = fzf_opts.fn_post_fzf
   fzf_opts.fn_post_fzf = function(...)
@@ -1533,12 +1540,12 @@ function M.explorer(opts)
       -- Set a flag that we had clipboard visible
       explorer_state.had_clipboard = true
     end
-    
+
     if original_on_complete then
       return original_on_complete(...)
     end
   end
-  
+
   -- Hook to restore clipboard after picker opens
   local original_fn_pre_fzf = fzf_opts.fn_pre_fzf
   fzf_opts.fn_pre_fzf = function(...)
@@ -1548,7 +1555,7 @@ function M.explorer(opts)
         show_clipboard_buffer()
       end)
     end
-    
+
     if original_fn_pre_fzf then
       return original_fn_pre_fzf(...)
     end
