@@ -1458,6 +1458,38 @@ function M.explorer(opts)
           return
         end
 
+        -- Handle multiple file selection
+        if #selected > 1 then
+          local files = {}
+          for _, entry in ipairs(selected) do
+            local file_info = extract_filename(entry)
+            if file_info and file_info ~= '../' then
+              local file_path = path.join({ current_dir, file_info })
+              file_path = vim.fn.fnamemodify(file_path, ':p')
+              local file_type = get_file_type(file_path)
+              
+              -- Only add regular files to quickfix, skip directories
+              if file_type == 'file' then
+                table.insert(files, {
+                  filename = file_path,
+                  lnum = 1,
+                  col = 1,
+                  text = file_info
+                })
+              end
+            end
+          end
+          
+          if #files > 0 then
+            vim.fn.setqflist(files, 'r')
+            vim.cmd('copen')
+          else
+            vim.notify('No files selected (directories are skipped)', vim.log.levels.WARN)
+          end
+          return
+        end
+
+        -- Handle single file selection
         local entry = selected[1]
         local file_info = extract_filename(entry)
         if not file_info then return end
